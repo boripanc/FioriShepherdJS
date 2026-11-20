@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Fiori Guided Tours - Launchpad sandbox</title>
+	<script>
+		window["sap-ushell-config"] = {
+			defaultRenderer: "fiori2",
+			bootstrapPlugins: {
+				FioriShepherdGuide: {
+					component: "fiori.shepherd.guide",
+					url: "../",
+					config: {
+						autoStart: true
+					}
+				}
+			},
+			applications: {
+				"SalesOrder-manage": {
+					title: "Manage Sales Orders",
+					description: "Guided tour demo app",
+					icon: "sap-icon://sales-order",
+					additionalInformation: "SAPUI5.Component=fiori.shepherd.guide.demo",
+					applicationType: "URL",
+					url: "./demoapp"
+				}
+			}
+		};
+	</script>
+	<script src="../test-resources/sap/ushell/bootstrap/sandbox.js" id="sap-ushell-bootstrap"></script>
+	<script src="../resources/sap-ui-core.js"
+		id="sap-ui-bootstrap"
+		data-sap-ui-libs="sap.m, sap.ushell"
+		data-sap-ui-theme="sap_horizon"
+		data-sap-ui-compat-version="edge"
+		data-sap-ui-async="true"
+		data-sap-ui-resource-roots='{"fiori.shepherd.guide": "../", "fiori.shepherd.guide.demo": "./demoapp"}'
+		data-sap-ui-frame-options="allow"
+		data-sap-ui-flex-mode="sap.ui.fl.write"></script>
+	<script>
+		sap.ui.getCore().attachInit(function () {
+			sap.ushell.Container.createRenderer("fiori2", true).then(function (oRenderer) {
+				oRenderer.placeAt("content");
+			});
+		});
+	</script>
+</head>
+<body class="sapUiBody" id="content"></body>
+</html>
