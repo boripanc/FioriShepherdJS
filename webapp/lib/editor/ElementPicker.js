@@ -1,8 +1,9 @@
 /**
  * "Click an element" mode: outlines the UI5 control under the mouse and reports the
  * one the user clicks, without letting the click reach the app. Esc cancels.
+ * Also works inside embedded pages of the same server (e.g. SAP GUI for HTML).
  */
-sap.ui.define(["./SelectorBuilder"], function (SelectorBuilder) {
+sap.ui.define(["./SelectorBuilder", "../TargetResolver", "../FrameProxy"], function (SelectorBuilder, TargetResolver, FrameProxy) {
 	"use strict";
 
 	function ElementPicker(mOptions) {
@@ -66,8 +67,14 @@ sap.ui.define(["./SelectorBuilder"], function (SelectorBuilder) {
 					}
 				}
 			};
-			Object.keys(that._mHandlers).forEach(function (sEvent) {
-				window.addEventListener(sEvent, that._mHandlers[sEvent], true);
+			// the Launchpad window plus every same-origin embedded page (SAP GUI for HTML etc.)
+			that._aWindows = [window].concat(TargetResolver.frameDocuments(true).map(function (oDoc) {
+				return oDoc.defaultView;
+			}).filter(Boolean));
+			that._aWindows.forEach(function (oWin) {
+				Object.keys(that._mHandlers).forEach(function (sEvent) {
+					oWin.addEventListener(sEvent, that._mHandlers[sEvent], true);
+				});
 			});
 		});
 	};
@@ -81,10 +88,17 @@ sap.ui.define(["./SelectorBuilder"], function (SelectorBuilder) {
 	ElementPicker.prototype._finish = function (oResult) {
 		var that = this;
 		if (this._mHandlers) {
-			Object.keys(this._mHandlers).forEach(function (sEvent) {
-				window.removeEventListener(sEvent, that._mHandlers[sEvent], true);
+			(this._aWindows || [window]).forEach(function (oWin) {
+				Object.keys(that._mHandlers).forEach(function (sEvent) {
+					try {
+						oWin.removeEventListener(sEvent, that._mHandlers[sEvent], true);
+					} catch (e) {
+						// the embedded page was closed meanwhile
+					}
+				});
 			});
 			this._mHandlers = null;
+			this._aWindows = null;
 		}
 		[this._oHighlight, this._oTip].forEach(function (oNode) {
 			if (oNode && oNode.parentNode) {
@@ -112,7 +126,8 @@ sap.ui.define(["./SelectorBuilder"], function (SelectorBuilder) {
 	};
 
 	ElementPicker.prototype._onMove = function (oEvent) {
-		var oNode = document.elementFromPoint(oEvent.clientX, oEvent.clientY);
+		var oDoc = (oEvent.view && oEvent.view.document) || document;
+		var oNode = oDoc.elementFromPoint(oEvent.clientX, oEvent.clientY);
 		if (!oNode || this._isInEditor(oNode) || oNode === this._oHighlight || oNode === this._oTip) {
 			return;
 		}
@@ -123,7 +138,9 @@ sap.ui.define(["./SelectorBuilder"], function (SelectorBuilder) {
 			this._oTip.style.display = "none";
 			return;
 		}
-		var oRect = oResult.element.getBoundingClientRect();
+		var oRect = FrameProxy.rectInTopWindow(oResult.element);
+		oRect.right = oRect.left + oRect.width;
+		oRect.bottom = oRect.top + oRect.height;
 		var oStyle = this._oHighlight.style;
 		oStyle.display = "block";
 		oStyle.left = oRect.left - 3 + "px";

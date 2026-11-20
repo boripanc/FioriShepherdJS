@@ -84,7 +84,8 @@ try {
 	check(/Button.*Create/.test(label2), `Element without own id falls back to type + text (${label2})`);
 	await page.fill("#fioriGuideEditorStepTitleInput-inner", "Create a new order");
 	await page.fill("#fioriGuideEditorStepTextInput-inner", "When you need a new order, start here.");
-	await page.click(".fioriGuideEditorStepForm .sapMCb:has-text('Wait until the user clicks')");
+	await page.click("#fioriGuideEditorAdvance");
+	await page.click(".sapMSelectList li:has-text('The user clicks the element')");
 	await shot("3-step-details");
 
 	// save the draft
@@ -134,6 +135,54 @@ try {
 	await page.waitForTimeout(800);
 	check(await page.locator("#fioriGuideEditor .sapMList .sapMLIB").count() === 6, "Existing tour opens with its 6 steps");
 	await shot("8-edit-existing");
+	await page.click("#fioriShepherdGuideEditorButton"); // close editor
+
+	// ---- transaction code steps in SAP GUI for HTML (mock screen in an iframe) ----
+	await page.evaluate(() => localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "1"));
+	await page.evaluate(() => { window.location.hash = "#SalesDocument-createGui"; });
+	const gui = page.frameLocator("iframe");
+	await gui.locator("#ToolbarOkCode").waitFor({ timeout: 30000 });
+	await page.waitForTimeout(1500);
+	await page.click("#fioriShepherdGuideEditorButton");
+	await page.waitForTimeout(1000);
+	await page.click("#fioriGuideEditor .sapMSlt");
+	await page.click(".sapMSelectList li:has-text('+ New tour')");
+	await page.fill("#fioriGuideEditorTourTitle-inner", "Start VA01");
+	await page.click("#fioriGuideEditorAddTcode");
+	await page.waitForTimeout(500);
+	const tcodeLabel = await targetLabel();
+	check(/command field/i.test(tcodeLabel), `"Add T-code step" targets the SAP GUI command field automatically (${tcodeLabel})`);
+	await page.fill("#fioriGuideEditorExpectValue-inner", "VA01");
+	await shot("9-tcode-step");
+
+	// open VA01 in the GUI, then pick a field inside the GUI screen
+	await gui.locator("#ToolbarOkCode").fill("VA01");
+	await gui.locator("#ToolbarOkCode").press("Enter");
+	await gui.locator("[title='Sales Document Type']").waitFor();
+	// the GUI fields are on the left, so move the panel back to the right
+	await page.click("#fioriGuideEditorDock");
+	await page.click("#fioriGuideEditorAddStep");
+	await page.waitForTimeout(300);
+	const field = gui.locator("[title='Sales Document Type']");
+	const fbox = await field.boundingBox();
+	await page.mouse.move(fbox.x + 10, fbox.y + fbox.height / 2);
+	await page.waitForTimeout(300);
+	await shot("10-picking-in-gui");
+	await page.mouse.click(fbox.x + 10, fbox.y + fbox.height / 2);
+	await page.waitForTimeout(500);
+	const guiLabel = await targetLabel();
+	check(/Sales Document Type|Order Type|M0:46/.test(guiLabel), `Field inside the SAP GUI screen can be picked (${guiLabel})`);
+	await page.fill("#fioriGuideEditorStepTitleInput-inner", "Order type");
+	await page.click("#fioriGuideEditorAdvance");
+	await page.click(".sapMSelectList li:has-text('The user types a value'):not(:has-text('Enter'))");
+	await page.fill("#fioriGuideEditorExpectValue-inner", "OR");
+	await page.click("#fioriGuideEditorSave");
+	await page.waitForTimeout(1200);
+	const drafts2 = await page.evaluate(() => JSON.parse(localStorage.getItem("fiori.shepherd.guide.drafts") || "{}"));
+	const va01 = Object.values(drafts2).find((t) => t.title === "Start VA01");
+	check(!!va01 && va01.steps[0].tcode === true && va01.steps[0].expectValue === "VA01" && va01.steps[0].target.webgui === "okcode", "T-code step saved as {tcode, expectValue: VA01, target: command field}");
+	check(!!va01 && va01.steps[1].target.frame === true && va01.steps[1].expectValue === "OR" && va01.steps[1].advanceOn === "input", "GUI field step saved with a frame target and expected value");
+	await shot("11-gui-tour-saved");
 } catch (e) {
 	failed = true;
 	console.error(e);

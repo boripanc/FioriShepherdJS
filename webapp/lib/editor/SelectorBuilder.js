@@ -100,10 +100,11 @@ sap.ui.define(["../TargetResolver"], function (TargetResolver) {
 
 	function cssFallback(oDom) {
 		var aParts = [];
-		for (var oNode = oDom; oNode && oNode !== document.body && aParts.length < 4; oNode = oNode.parentElement) {
+		var bFrame = oDom.ownerDocument !== document;
+		for (var oNode = oDom; oNode && oNode !== oNode.ownerDocument.body && aParts.length < 4; oNode = oNode.parentElement) {
 			var sPart = oNode.tagName.toLowerCase();
 			var aClasses = Array.prototype.filter.call(oNode.classList, function (s) {
-				return /^sap[A-Z]/.test(s) && !/(Focus|Hover|Active|Pressed|Selected)/.test(s);
+				return (bFrame || /^sap[A-Z]/.test(s)) && !/(Focus|Hover|Active|Pressed|Selected)/i.test(s);
 			}).slice(0, 2);
 			if (aClasses.length) {
 				sPart += "." + aClasses.join(".");
@@ -111,6 +112,53 @@ sap.ui.define(["../TargetResolver"], function (TargetResolver) {
 			aParts.unshift(sPart);
 		}
 		return { selector: aParts.join(" > ") };
+	}
+
+	function cssEscape(s) {
+		return window.CSS && CSS.escape ? CSS.escape(s) : s.replace(/([^\w-])/g, "\\$1");
+	}
+
+	function frameLabel(oDom) {
+		var sTitle = oDom.getAttribute("title") || oDom.getAttribute("aria-label");
+		if (!sTitle && oDom.id) {
+			var oLabel = oDom.ownerDocument.querySelector("label[for='" + oDom.id.replace(/'/g, "\\'") + "']");
+			sTitle = oLabel && oLabel.textContent.trim();
+		}
+		return sTitle || oDom.textContent.trim().slice(0, 40) || oDom.tagName.toLowerCase();
+	}
+
+	/**
+	 * Elements inside embedded pages (SAP GUI for HTML and other same-server pages):
+	 * the SAP GUI command field gets its own shortcut, otherwise id, title or name.
+	 */
+	function fromFrameElement(oDom) {
+		// prefer the field itself over e.g. a wrapping span
+		var oField = oDom.closest("input, textarea, select, button, a, [role=button], [title]") || oDom;
+		var oOkCode = TargetResolver.resolve({ webgui: "okcode" });
+		if (oOkCode && oOkCode === oField) {
+			return { target: { webgui: "okcode" }, element: oField, label: "SAP GUI command field", quality: "stable" };
+		}
+		var aCandidates = [];
+		if (oField.id && !/^\d|^__|^[a-f0-9-]{20,}$/i.test(oField.id)) {
+			aCandidates.push("#" + cssEscape(oField.id));
+		}
+		["title", "name", "aria-label"].forEach(function (sAttr) {
+			var sValue = oField.getAttribute(sAttr);
+			if (sValue && sValue.length <= 80) {
+				aCandidates.push(oField.tagName.toLowerCase() + "[" + sAttr + "=\"" + sValue.replace(/"/g, "\\\"") + "\"]");
+			}
+		});
+		for (var i = 0; i < aCandidates.length; i++) {
+			var oTarget = { frame: true, selector: aCandidates[i] };
+			if (TargetResolver.resolve(oTarget) === oField) {
+				return { target: oTarget, element: oField, label: frameLabel(oField), quality: "good" };
+			}
+		}
+		var oFallback = Object.assign({ frame: true }, cssFallback(oField));
+		if (TargetResolver.resolve(oFallback)) {
+			return { target: oFallback, element: TargetResolver.resolve(oFallback), label: frameLabel(oField), quality: "fragile" };
+		}
+		return null;
 	}
 
 	function fromControl(oControl, oDom) {
@@ -149,6 +197,9 @@ sap.ui.define(["../TargetResolver"], function (TargetResolver) {
 		 *   quality: "stable" (developer id), "good" (type + text), "fragile" (CSS)
 		 */
 		build: function (oDom) {
+			if (oDom && oDom.ownerDocument !== document) {
+				return fromFrameElement(oDom);
+			}
 			return fromControl(controlFor(oDom), oDom);
 		},
 
@@ -157,6 +208,13 @@ sap.ui.define(["../TargetResolver"], function (TargetResolver) {
 		 * ("the whole filter bar instead of one of its buttons").
 		 */
 		buildParent: function (oPrevious) {
+			if (oPrevious && oPrevious.element && oPrevious.element.ownerDocument !== document) {
+				var oUp = oPrevious.element.parentElement;
+				while (oUp && oUp.getBoundingClientRect().width <= oPrevious.element.getBoundingClientRect().width + 2 && oUp.parentElement) {
+					oUp = oUp.parentElement;
+				}
+				return oUp && oUp.tagName !== "BODY" ? fromFrameElement(oUp) : null;
+			}
 			var oParent = oPrevious && oPrevious.control && oPrevious.control.getParent();
 			while (oParent && oParent.getDomRef && oPrevious.element && oParent.getDomRef() === oPrevious.element) {
 				oParent = oParent.getParent(); // same DOM element, not really larger

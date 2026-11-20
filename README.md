@@ -29,7 +29,8 @@ npm install
 npm start          # opens http://localhost:8080/test/flpSandbox.html
 ```
 
-The sandbox Launchpad has one demo app ("Manage Sales Orders"). Open it and its tour starts by itself.
+The sandbox Launchpad has a demo app ("Manage Sales Orders") and a mock SAP GUI for HTML screen
+("Create Sales Order (SAP GUI)") for transaction code tours. Open it and its tour starts by itself.
 Use the header button (book icon) to start tours again. To see the auto-start once more, run
 `localStorage.clear()` in the browser console.
 
@@ -66,6 +67,42 @@ npm test
 
 `enableEditor` controls access: `"url"` (default, as above), `true` (always) or `false` (never, e.g. in production).
 Drafts never leave the author's browser until they are exported, so the editor is safe to leave on: other users see nothing.
+
+## Guiding users to type a transaction code
+
+Steps can ask the user to type something specific, such as a transaction code, and only continue once it is right.
+
+**In SAP GUI for HTML transactions** (opened from the Launchpad, shown in an embedded page):
+
+```json
+{ "title": "Start the transaction", "text": "Type the transaction code and press Enter.", "tcode": "VA01" }
+```
+
+- The step points at the SAP GUI command field (OK-code field) automatically.
+- The user types `VA01` (or `/nva01`, `/oVA01`: case and the `/n` and `/o` prefixes are ignored) and presses Enter.
+  SAP GUI opens the transaction and the tour moves to the next step, which can point at fields on the new screen.
+- A wrong code is stopped before it reaches SAP GUI and the popup says "Please type VA01".
+  Set `"blockWrongValue": false` to let it through.
+- Fields on SAP GUI screens are targets like `{ "frame": true, "selector": "[title='Sales Document Type']" }`.
+  The editor creates these for you when you click a field.
+
+**Any other field** (Launchpad search, a field in a Fiori app):
+
+```json
+{ "target": { "controlId": "searchField" }, "expectValue": "VA01", "advanceOn": "enter" }
+```
+
+`expectValue` can be one value, a list (`["VA01", "VA02"]`) or a regular expression (`"/^VA0[12]$/"`, with
+`expectHint` for what to show the user). `advanceOn: "input"` continues as soon as the value is right, without Enter.
+
+**In the editor:** press **Add T-code step** (with the SAP GUI screen open it picks the command field by itself) and
+enter the code, or, for any picked field, set *Continue when* to *The user types a value (and presses Enter)*.
+
+**Limits:** this works when SAP GUI for HTML (or the other embedded page) comes from the same server as the
+Launchpad, which is the normal setup on an ABAP front-end server. Browsers do not let a page look into embedded pages
+from a different server, and the desktop SAP GUI (SAP Logon) is outside the browser, so neither can be guided.
+The command field is found by its id `ToolbarOkCode` (and older variants); this was tested against a mock SAP GUI page,
+so please try it on your system's SAP GUI for HTML first.
 
 ## Writing tours by hand
 
@@ -117,7 +154,9 @@ A steps file:
 | `position` | `top`, `bottom`, `left`, `right`, optionally with `-start` / `-end`, or `auto`. Default `bottom`. |
 | `waitFor` | Milliseconds to wait for the target to appear (default 5000). If it never appears, the step is shown centered. |
 | `skipIfMissing` | `true` skips the step when its target is not on screen. |
-| `advanceOn` | `"click"` (or another DOM event): go to the next step when the user does this on the target. The Next button is hidden unless `showNext: true`. |
+| `advanceOn` | `"click"` (or another DOM event): go to the next step when the user does this on the target. The Next button is hidden unless `showNext: true`. With `expectValue`: `"enter"` (default) or `"input"`. |
+| `expectValue` | The user must type this into the target field, e.g. `"VA01"`. See [transaction codes](#guiding-users-to-type-a-transaction-code). |
+| `tcode` | `"VA01"`: transaction code step in SAP GUI for HTML (command field, ignores `/n` `/o`, continues on Enter). |
 | `canClickTarget` | `false` blocks clicks on the highlighted element. |
 | `classes` | Extra CSS classes for the popup. |
 
@@ -128,6 +167,8 @@ A steps file:
 | `{ "controlId": "btnCreate" }` | The UI5 control whose id is `btnCreate` or ends with `--btnCreate`. This is the id from the app's XML view, so it survives the Launchpad's id prefixes. Best choice for freestyle apps and Fiori elements apps with stable ids. |
 | `{ "controlType": "sap.m.Button", "properties": { "text": "Create" } }` | The first visible control of that type with those property values. Handy when an app has no stable ids. |
 | `"#some .css"` or `{ "selector": "..." }` | Plain CSS selector. |
+| `{ "frame": true, "selector": "..." }` | CSS selector inside an embedded page from the same server, e.g. a SAP GUI for HTML screen. |
+| `{ "webgui": "okcode" }` | The SAP GUI for HTML command field. |
 | `"index": 1` | (any object form) take the second visible match instead of the first. |
 | `"subSelector": ".sapMInputBaseInner"` | (any object form) highlight an element inside the control. |
 

@@ -60,6 +60,14 @@ sap.ui.define([
 		return sPrefix ? "^" + escapeRegex(sPrefix) : "^$";
 	}
 
+	/** How the user moves on from a step: next | click | typeEnter | type */
+	function advanceOf(oStep) {
+		if (oStep.tcode || (oStep.expectValue !== undefined && oStep.expectValue !== "")) {
+			return oStep.advanceOn === "input" ? "type" : "typeEnter";
+		}
+		return oStep.advanceOn === "click" ? "click" : "next";
+	}
+
 	function TourEditor(oPlugin) {
 		this._oPlugin = oPlugin;
 		this._oBundle = oPlugin.getBundle();
@@ -178,7 +186,10 @@ sap.ui.define([
 						titleI18n: typeof oStep.title === "object" ? oStep.title : null,
 						textI18n: typeof oStep.text === "object" ? oStep.text : null,
 						position: oStep.position || "bottom",
-						waitClick: oStep.advanceOn === "click",
+						advance: advanceOf(oStep),
+						expectValue: oStep.tcode && typeof oStep.tcode === "string" ? oStep.tcode
+							: Array.isArray(oStep.expectValue) ? oStep.expectValue.join(", ") : oStep.expectValue || "",
+						tcode: !!oStep.tcode,
 						targetLabel: oStep.target ? that._describeTarget(oStep.target) : that.t("editor.noTarget"),
 						quality: oStep.target ? (oFound ? "found" : "missing") : "none"
 					});
@@ -197,6 +208,14 @@ sap.ui.define([
 	TourEditor.prototype._describeTarget = function (oTarget) {
 		if (typeof oTarget === "string") {
 			return oTarget;
+		}
+		if (oTarget.webgui === "okcode") {
+			return this.t("editor.okcodeLabel");
+		}
+		if (oTarget.frame) {
+			var oDom = TargetResolver.resolve(oTarget);
+			var sName = oDom && (oDom.getAttribute("title") || oDom.getAttribute("aria-label"));
+			return sName ? this.t("editor.frameFieldLabel", [sName]) : String(oTarget.selector || "").replace(/\\/g, "");
 		}
 		if (oTarget.controlId) {
 			return "“" + oTarget.controlId + "”";
@@ -247,11 +266,14 @@ sap.ui.define([
 									]
 								}).addStyleClass("fioriGuideEditorStepText"),
 								new Icon({
-									src: { parts: ["quality", "waitClick"], formatter: function (sQuality, bWait) {
+									src: { parts: ["quality", "advance"], formatter: function (sQuality, sAdvance) {
 										if (sQuality === "missing" || sQuality === "fragile") {
 											return "sap-icon://message-warning";
 										}
-										return bWait ? "sap-icon://touch" : "";
+										if (sAdvance === "typeEnter" || sAdvance === "type") {
+											return "sap-icon://keyboard-and-mouse";
+										}
+										return sAdvance === "click" ? "sap-icon://touch" : "";
 									} },
 									color: { path: "quality", formatter: function (sQuality) {
 										return sQuality === "missing" || sQuality === "fragile" ? "Critical" : "Default";
@@ -315,7 +337,30 @@ sap.ui.define([
 					change: this._markDirty.bind(this),
 					items: { path: "/positions", template: new Item({ key: "{key}", text: "{text}" }), templateShareable: false }
 				}),
-				new CheckBox({ wrapping: true, text: this.t("editor.waitClick"), selected: "{waitClick}", visible: "{= ${quality} !== 'none' }", select: this._markDirty.bind(this) })
+				new Label({ text: this.t("editor.advance"), visible: "{= ${quality} !== 'none' }" }),
+				new Select("fioriGuideEditorAdvance", {
+					width: "100%",
+					visible: "{= ${quality} !== 'none' }",
+					selectedKey: "{advance}",
+					change: this._markDirty.bind(this),
+					items: [
+						new Item({ key: "next", text: this.t("editor.advance.next") }),
+						new Item({ key: "click", text: this.t("editor.advance.click") }),
+						new Item({ key: "typeEnter", text: this.t("editor.advance.typeEnter") }),
+						new Item({ key: "type", text: this.t("editor.advance.type") })
+					]
+				}),
+				new Label({ text: this.t("editor.expectValue"), required: true, visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }" }),
+				new Input("fioriGuideEditorExpectValue", {
+					value: "{expectValue}",
+					valueLiveUpdate: true,
+					placeholder: this.t("editor.expectValuePlaceholder"),
+					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
+					liveChange: this._markDirty.bind(this)
+				}),
+				new CheckBox({ wrapping: true, text: this.t("editor.tcode"), selected: "{tcode}",
+					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
+					select: this._markDirty.bind(this) })
 			]
 		}).addStyleClass("fioriGuideEditorStepForm");
 
@@ -356,7 +401,8 @@ sap.ui.define([
 							wrap: "Wrap",
 							items: [
 								new Button("fioriGuideEditorAddStep", { text: this.t("editor.addStep"), icon: "sap-icon://touch", type: "Emphasized", press: this._addStepByPicking.bind(this) }).addStyleClass("sapUiTinyMarginEnd"),
-								new Button("fioriGuideEditorAddMessage", { text: this.t("editor.addMessage"), icon: "sap-icon://message-popup", press: this._addMessageStep.bind(this) })
+								new Button("fioriGuideEditorAddMessage", { text: this.t("editor.addMessage"), icon: "sap-icon://message-popup", press: this._addMessageStep.bind(this) }).addStyleClass("sapUiTinyMarginEnd"),
+								new Button("fioriGuideEditorAddTcode", { text: this.t("editor.addTcode"), icon: "sap-icon://keyboard-and-mouse", press: this._addTcodeStep.bind(this) })
 							]
 						}),
 						this._oStepList,
@@ -446,7 +492,7 @@ sap.ui.define([
 				return;
 			}
 			var aSteps = that._steps().slice();
-			aSteps.push(Object.assign({ title: "", text: "", position: "bottom", waitClick: false }, that._fromPick(oPick)));
+			aSteps.push(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false }, that._fromPick(oPick)));
 			that._oModel.setProperty("/tour/steps", aSteps);
 			that._markDirty();
 			that._showStep(aSteps.length - 1);
@@ -459,11 +505,50 @@ sap.ui.define([
 
 	TourEditor.prototype._addMessageStep = function () {
 		var aSteps = this._steps().slice();
-		aSteps.push({ title: "", text: "", position: "bottom", waitClick: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
+		aSteps.push({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
 		this._oModel.setProperty("/tour/steps", aSteps);
 		this._markDirty();
 		this._showStep(aSteps.length - 1);
 		this._focusStepTitle();
+	};
+
+	/**
+	 * A "type the transaction code" step. Uses the SAP GUI command field when a SAP GUI
+	 * screen is open; otherwise the author clicks the field (e.g. the Launchpad search).
+	 */
+	TourEditor.prototype._addTcodeStep = function () {
+		var that = this;
+		var oOkCode = TargetResolver.resolve({ webgui: "okcode" });
+		var pPick;
+		if (oOkCode) {
+			pPick = Promise.resolve({ target: { webgui: "okcode" }, element: oOkCode, label: this.t("editor.okcodeLabel"), quality: "stable" });
+		} else {
+			MessageToast.show(this.t("editor.tcodePickHint"), { duration: 5000 });
+			pPick = this._pick();
+		}
+		pPick.then(function (oPick) {
+			if (!oPick) {
+				return;
+			}
+			var aSteps = that._steps().slice();
+			aSteps.push(Object.assign({
+				title: that.t("editor.tcodeDefaultTitle"),
+				text: that.t("editor.tcodeDefaultText"),
+				position: "bottom-start",
+				advance: "typeEnter",
+				expectValue: "",
+				tcode: true
+			}, that._fromPick(oPick)));
+			that._oModel.setProperty("/tour/steps", aSteps);
+			that._markDirty();
+			that._showStep(aSteps.length - 1);
+			setTimeout(function () {
+				var oInput = sap.ui.getCore().byId("fioriGuideEditorExpectValue");
+				if (oInput) {
+					oInput.focus();
+				}
+			}, 150);
+		});
 	};
 
 	TourEditor.prototype._focusStepTitle = function () {
@@ -592,11 +677,20 @@ sap.ui.define([
 			if (oStep.target) {
 				oOut.target = oStep.target;
 				oOut.position = oStep.position || "bottom";
-				if (oStep.waitClick) {
+				if (oStep.advance === "click") {
 					oOut.advanceOn = "click";
+				} else if ((oStep.advance === "typeEnter" || oStep.advance === "type") && String(oStep.expectValue || "").trim()) {
+					var aValues = String(oStep.expectValue).split(",").map(function (sValue) {
+						return sValue.trim();
+					}).filter(Boolean);
+					oOut.expectValue = aValues.length === 1 ? aValues[0] : aValues;
+					oOut.advanceOn = oStep.advance === "type" ? "input" : "enter";
+					if (oStep.tcode) {
+						oOut.tcode = true;
+					}
 				}
 			}
-			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext"].forEach(function (sKey) {
+			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue"].forEach(function (sKey) {
 				if (oStep[sKey] !== undefined && oStep[sKey] !== null) {
 					oOut[sKey] = oStep[sKey];
 				}
@@ -620,6 +714,14 @@ sap.ui.define([
 		sap.ui.getCore().byId("fioriGuideEditorTourTitle").setValueState("None");
 		if (!(oTour.steps || []).length) {
 			MessageToast.show(this.t("editor.needSteps"));
+			return false;
+		}
+		var iMissing = (oTour.steps || []).findIndex(function (oStep) {
+			return (oStep.advance === "typeEnter" || oStep.advance === "type") && !String(oStep.expectValue || "").trim();
+		});
+		if (iMissing >= 0) {
+			this._showStep(iMissing);
+			MessageToast.show(this.t("editor.needExpectValue", [iMissing + 1]));
 			return false;
 		}
 		return true;

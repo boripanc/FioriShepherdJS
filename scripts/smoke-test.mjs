@@ -86,6 +86,31 @@ try {
 	check(await page.locator(".sapMActionSheet .sapMBtn").count() >= 2, "Header button lists both app tours");
 	await page.waitForTimeout(500);
 	await page.screenshot({ path: `${SHOTS}/6-chooser.png` });
+	// ---- SAP GUI for HTML (mock): transaction code step ----
+	await page.keyboard.press("Escape");
+	await page.evaluate(() => { window.location.hash = "#SalesDocument-createGui"; });
+	await page.waitForSelector(".shepherd-element:visible", { timeout: 30000 });
+	check((await stepTitle()).trim() === "Create a sales order", "SAP GUI tour auto-starts");
+	await page.click(".shepherd-element:visible .fioriGuideBtnPrimary");
+	await page.waitForTimeout(1200);
+	check((await stepTitle()).trim() === "Start the transaction", "T-code step points at the SAP GUI command field");
+	const gui = page.frameLocator("iframe");
+	await gui.locator("#ToolbarOkCode").fill("VA02");
+	await gui.locator("#ToolbarOkCode").press("Enter");
+	await page.waitForTimeout(600);
+	check(/Please type VA01/.test(await page.locator(".fioriGuideExpect").textContent()), "Wrong transaction code is blocked with a hint");
+	check((await gui.locator("h1").textContent()) === "SAP Easy Access", "Wrong code did not reach SAP GUI");
+	await page.screenshot({ path: `${SHOTS}/7-tcode-wrong.png` });
+	await gui.locator("#ToolbarOkCode").fill("/nva01");
+	await gui.locator("#ToolbarOkCode").press("Enter");
+	await page.waitForTimeout(1800);
+	check((await gui.locator("h1").textContent()) === "Create Sales Documents", "Right code (with /n) opens the transaction");
+	check((await stepTitle()).trim() === "Order type", "Tour continues on the transaction screen");
+	await page.waitForTimeout(500);
+	await page.screenshot({ path: `${SHOTS}/8-gui-field-step.png` });
+	await gui.locator("[title='Sales Document Type']").type("or");
+	await page.waitForTimeout(1200);
+	check((await stepTitle()).trim() === "Sales organization", "Typing the expected value moves on by itself");
 } catch (e) {
 	failed = true;
 	console.error(e);
