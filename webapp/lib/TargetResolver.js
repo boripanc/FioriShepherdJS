@@ -9,6 +9,11 @@
  *   { "controlType": "sap.m.Button",
  *     "properties": { "text": "Create" } }            first visible control of that type with those properties
  *
+ *   { "frame": true, "selector": "#x" }               CSS selector inside an embedded page (iframe) of the
+ *                                                     same server, e.g. SAP GUI for HTML transactions.
+ *                                                     "frame" can also be a CSS selector for the iframe.
+ *   { "webgui": "okcode" }                            the command field (OK-code field) of SAP GUI for HTML
+ *
  * Optional extras for the object forms:
  *   "index": 1             pick the n-th visible match (0-based)
  *   "subSelector": ".x"    CSS selector inside the control's DOM element
@@ -28,8 +33,71 @@ sap.ui.define([], function () {
 		return {};
 	}
 
+	/** Command field of SAP GUI for HTML, in current and older WebGUI renderings. */
+	var WEBGUI_TARGETS = {
+		okcode: "#ToolbarOkCode, input[name='~OkCode'], input[id$='okcd'], input[title='Command field' i]"
+	};
+
 	function isVisible(oDom) {
-		return !!oDom && oDom.isConnected !== false && oDom.getClientRects().length > 0;
+		if (!oDom || oDom.isConnected === false || oDom.getClientRects().length === 0) {
+			return false;
+		}
+		var oFrame = frameElementOf(oDom);
+		return !oFrame || isVisible(oFrame);
+	}
+
+	/** The iframe element that contains oDom, or null for the main page. */
+	function frameElementOf(oDom) {
+		var oWin = oDom && oDom.ownerDocument && oDom.ownerDocument.defaultView;
+		try {
+			return oWin && oWin !== window ? oWin.frameElement : null;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	/**
+	 * Documents of the iframes we may look into: same-origin only (the browser does not
+	 * allow reading pages from another server), searched up to 3 levels deep.
+	 */
+	function frameDocuments(vFrame, oDoc, iDepth) {
+		oDoc = oDoc || document;
+		iDepth = iDepth || 0;
+		var aResult = [];
+		if (iDepth > 3) {
+			return aResult;
+		}
+		var sFrameSelector = typeof vFrame === "string" ? vFrame : "iframe, frame";
+		var aFrames = Array.prototype.slice.call(oDoc.querySelectorAll("iframe, frame"));
+		aFrames.forEach(function (oFrame) {
+			var oInner;
+			try {
+				oInner = oFrame.contentDocument;
+			} catch (e) {
+				oInner = null; // other origin
+			}
+			if (!oInner || !oInner.body) {
+				return;
+			}
+			if (iDepth > 0 || oFrame.matches(sFrameSelector)) {
+				aResult.push(oInner);
+			}
+			aResult = aResult.concat(frameDocuments(vFrame, oInner, iDepth + 1));
+		});
+		return aResult;
+	}
+
+	function queryAll(oTarget) {
+		var aDocs = oTarget.frame ? frameDocuments(oTarget.frame) : [document];
+		var aResult = [];
+		aDocs.forEach(function (oDoc) {
+			try {
+				aResult = aResult.concat(Array.prototype.slice.call(oDoc.querySelectorAll(oTarget.selector)));
+			} catch (e) {
+				// invalid selector: no match
+			}
+		});
+		return aResult;
 	}
 
 	function domOf(oControl) {
@@ -83,8 +151,11 @@ sap.ui.define([], function () {
 		var oTarget = typeof vTarget === "string" ? { selector: vTarget } : vTarget;
 		var aCandidates;
 
+		if (oTarget.webgui) {
+			oTarget = Object.assign({}, oTarget, { frame: oTarget.frame || true, selector: WEBGUI_TARGETS[oTarget.webgui] || oTarget.webgui });
+		}
 		if (oTarget.selector) {
-			aCandidates = Array.prototype.slice.call(document.querySelectorAll(oTarget.selector));
+			aCandidates = queryAll(oTarget);
 		} else {
 			aCandidates = controlsFor(oTarget).map(domOf);
 		}
@@ -117,6 +188,8 @@ sap.ui.define([], function () {
 
 	return {
 		resolve: resolve,
-		waitFor: waitFor
+		waitFor: waitFor,
+		frameElementOf: frameElementOf,
+		frameDocuments: frameDocuments
 	};
 });

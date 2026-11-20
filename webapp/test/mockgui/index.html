@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SAP Easy Access (mock SAP GUI for HTML)</title>
+<!--
+	A tiny stand-in for SAP GUI for HTML, used to test tours that guide users through
+	transactions. It mimics what matters: it runs in an iframe of the Launchpad and has the
+	command (OK-code) field with id "ToolbarOkCode". Typing VA01 + Enter opens a mock
+	"Create Sales Documents" screen.
+-->
+<style>
+	body { margin: 0; font-family: "72", Arial, sans-serif; font-size: 14px; color: #1d2d3e; background: #f5f6f7; }
+	.toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #d9d9d9; }
+	.toolbar input { width: 180px; height: 26px; padding: 0 8px; border: 1px solid #556b82; border-radius: 4px; font-size: 14px; }
+	.toolbar button { height: 28px; padding: 0 12px; border: 1px solid #bcc3ca; border-radius: 6px; background: #fff; color: #0064d9; font-weight: bold; }
+	h1 { margin: 0; padding: 16px; font-size: 18px; background: #fff; border-bottom: 1px solid #d9d9d9; }
+	.content { padding: 16px; }
+	.tree div { padding: 4px 0 4px 16px; }
+	.field { display: grid; grid-template-columns: 180px 160px; align-items: center; margin-bottom: 8px; }
+	.field input { height: 26px; padding: 0 8px; border: 1px solid #556b82; border-radius: 4px; }
+	.status { position: fixed; bottom: 0; left: 0; right: 0; padding: 6px 16px; background: #fff; border-top: 1px solid #d9d9d9; color: #aa0808; min-height: 18px; }
+</style>
+</head>
+<body>
+	<div class="toolbar">
+		<input id="ToolbarOkCode" title="Command field" autocomplete="off" placeholder="">
+		<button id="M0:36::btn[0]" type="button">Enter</button>
+		<button id="M0:36::btn[3]" type="button">Back</button>
+	</div>
+	<div id="screen"></div>
+	<div class="status" id="wnd[0]/sbar"></div>
+<script>
+	var screens = {
+		home: '<h1>SAP Easy Access</h1><div class="content tree"><div>&#9656; Favorites</div><div>&#9656; SAP Menu</div></div>',
+		VA01: '<h1>Create Sales Documents</h1><div class="content">' +
+			'<div class="field"><label for="M0:46:::1:34">Order Type</label><input id="M0:46:::1:34" title="Sales Document Type"></div>' +
+			'<div class="field"><label for="M0:46:::3:34">Sales Organization</label><input id="M0:46:::3:34" title="Sales Organization"></div>' +
+			'<div class="field"><label for="M0:46:::4:34">Distribution Channel</label><input id="M0:46:::4:34" title="Distribution Channel"></div>' +
+			'<div class="field"><label for="M0:46:::5:34">Division</label><input id="M0:46:::5:34" title="Division"></div>' +
+			'</div>'
+	};
+	function show(name) {
+		document.getElementById("screen").innerHTML = screens[name];
+		document.getElementById("wnd[0]/sbar").textContent = "";
+		document.title = name === "home" ? "SAP Easy Access" : "Create Sales Documents";
+	}
+	function run() {
+		var field = document.getElementById("ToolbarOkCode");
+		var code = field.value.trim().toUpperCase().replace(/^\/[NO]/, "");
+		field.value = "";
+		if (screens[code]) {
+			show(code);
+		} else if (code) {
+			document.getElementById("wnd[0]/sbar").textContent = "Transaction " + code + " does not exist";
+		}
+	}
+	document.getElementById("ToolbarOkCode").addEventListener("keydown", function (e) {
+		if (e.key === "Enter") { run(); }
+	});
+	document.getElementById("M0:36::btn[0]").addEventListener("click", run);
+	document.getElementById("M0:36::btn[3]").addEventListener("click", function () { show("home"); });
+	show("home");
+</script>
+</body>
+</html>

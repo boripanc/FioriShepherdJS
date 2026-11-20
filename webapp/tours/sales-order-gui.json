@@ -1,0 +1,39 @@
+{
+	"steps": [
+		{
+			"id": "welcome",
+			"title": "Create a sales order",
+			"text": "This tour shows you how to start transaction <b>VA01</b> and fill in the first screen."
+		},
+		{
+			"id": "tcode",
+			"title": "Start the transaction",
+			"text": "Click the command field, type the transaction code and press <b>Enter</b>.",
+			"tcode": "VA01",
+			"position": "bottom-start"
+		},
+		{
+			"id": "order-type",
+			"title": "Order type",
+			"text": "Enter the order type for a standard order.",
+			"target": {
+				"frame": true,
+				"selector": "[title='Sales Document Type']"
+			},
+			"expectValue": "OR",
+			"advanceOn": "input",
+			"position": "right",
+			"waitFor": 8000
+		},
+		{
+			"id": "sales-org",
+			"title": "Sales organization",
+			"text": "Enter your sales organization, for example 1010. Then press Enter to continue to the item screen.",
+			"target": {
+				"frame": true,
+				"selector": "[title='Sales Organization']"
+			},
+			"position": "right"
+		}
+	]
+}
