@@ -1,0 +1,158 @@
+/* Tour editor side panel and element picker */
+.fioriGuideEditor {
+	position: fixed;
+	top: 3.5rem;
+	right: 0.75rem;
+	bottom: 0.75rem;
+	width: 24rem;
+	max-width: calc(100vw - 1.5rem);
+	/* above the app and shell header, below UI5 popups (dropdowns, dialogs start at ~20) */
+	z-index: 15;
+	border-radius: var(--sapPopover_BorderCornerRadius, 0.75rem);
+	box-shadow: var(--sapContent_Shadow3, 0 1rem 2rem 0 rgba(34, 53, 72, 0.15), 0 0 0 0.0625rem rgba(34, 53, 72, 0.15));
+	overflow: hidden;
+	background: var(--sapGroup_ContentBackground, #fff);
+}
+
+.fioriGuideEditor .fioriGuideEditorPage {
+	height: 100%;
+}
+
+.fioriGuideEditor .sapMBar .sapUiIcon {
+	margin: 0 0.5rem 0 0.25rem;
+	color: var(--sapContent_IconColor, #0064d9);
+}
+
+.fioriGuideEditorContent {
+	padding: 0.75rem 1rem 1rem;
+}
+
+.fioriGuideEditorContent > .sapMLabel {
+	margin-top: 0.75rem;
+}
+
+.fioriGuideEditorContent .sapMMsgStrip {
+	margin-bottom: 0.25rem;
+}
+
+.fioriGuideEditorContent .sapMList {
+	margin-top: 0.5rem;
+	border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+	border-radius: 0.5rem;
+	overflow: hidden;
+}
+
+.fioriGuideEditorStepNo {
+	flex: none;
+	width: 1.5rem;
+	height: 1.5rem;
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	margin-right: 0.625rem;
+	border-radius: 50%;
+	text-align: center;
+	font-weight: bold;
+	background: var(--sapButton_Emphasized_Background, #0070f2);
+	color: var(--sapButton_Emphasized_TextColor, #fff) !important;
+}
+
+.fioriGuideEditorStepText {
+	flex: 1;
+	min-width: 0;
+	padding: 0.375rem 0.5rem 0.375rem 0;
+}
+
+.fioriGuideEditorStepTitle {
+	font-weight: bold;
+}
+
+.fioriGuideEditorStepTarget {
+	font-size: var(--sapFontSmallSize, 0.75rem);
+	color: var(--sapContent_LabelColor, #556b82) !important;
+}
+
+.fioriGuideEditor .sapMLIB {
+	padding-left: 0.75rem;
+	padding-right: 0.75rem;
+}
+
+.fioriGuideEditorStepForm {
+	margin-top: 0.75rem;
+	padding: 0 0.75rem 0.75rem;
+	border-radius: 0.5rem;
+	background: var(--sapGroup_TitleBackground, var(--sapBackgroundColor, #f5f6f7));
+}
+
+.fioriGuideEditorStepForm > .sapMLabel {
+	margin-top: 0.5rem;
+}
+
+.fioriGuideEditorTarget {
+	margin-right: 0.25rem;
+	max-width: 12rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fioriGuideEditorPicking .sapMPage > section {
+	filter: grayscale(0.6);
+}
+
+.fioriGuideEditorJson textarea {
+	font-family: var(--sapFontFamily_Monospace, "72Mono", Consolas, monospace);
+	font-size: 0.75rem;
+}
+
+/* element picker */
+body.fioriGuidePicking,
+body.fioriGuidePicking * {
+	cursor: crosshair !important;
+}
+
+.fioriGuidePickHighlight {
+	position: fixed;
+	z-index: 100000;
+	pointer-events: none;
+	border: 2px solid var(--sapButton_Emphasized_Background, #0070f2);
+	border-radius: 0.375rem;
+	background: rgba(0, 112, 242, 0.08);
+	transition: all 60ms ease-out;
+}
+
+.fioriGuidePickHighlight[data-quality="fragile"] {
+	border-color: var(--sapCriticalColor, #e76500);
+	background: rgba(231, 101, 0, 0.08);
+}
+
+.fioriGuidePickTip {
+	position: fixed;
+	z-index: 100001;
+	pointer-events: none;
+	max-width: 24rem;
+	padding: 0.25rem 0.5rem;
+	border-radius: 0.25rem;
+	font-family: var(--sapFontFamily, "72", Arial, sans-serif);
+	font-size: 0.75rem;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	background: var(--sapButton_Emphasized_Background, #0070f2);
+	color: #fff;
+}
+
+.fioriGuideFlash {
+	outline: 3px solid var(--sapButton_Emphasized_Background, #0070f2) !important;
+	outline-offset: 2px;
+	animation: fioriGuideFlash 0.4s ease-in-out 4 alternate;
+}
+
+@keyframes fioriGuideFlash {
+	from { outline-color: transparent; }
+}
+
+.fioriGuideEditor.fioriGuideEditorLeft {
+	right: auto;
+	left: 0.75rem;
+}

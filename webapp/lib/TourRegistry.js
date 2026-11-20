@@ -70,7 +70,37 @@ sap.ui.define(["sap/base/Log"], function (Log) {
 		this._sBaseUrl = String(sBaseUrl || "").replace(/\/?$/, "/");
 		this._pIndex = null;
 		this._mTours = {};
+		this._fnOverlay = null;
 	}
+
+	/**
+	 * Adds tours that are not in the catalog file, e.g. editor drafts in this browser.
+	 * They replace catalog tours with the same id.
+	 * @param {function(): object[]} fnOverlay
+	 */
+	TourRegistry.prototype.setOverlay = function (fnOverlay) {
+		this._fnOverlay = fnOverlay;
+	};
+
+	/** Catalog tours plus overlay tours. */
+	TourRegistry.prototype.loadAll = function () {
+		var fnOverlay = this._fnOverlay;
+		return this.loadIndex().then(function (aTours) {
+			var aExtra = fnOverlay ? fnOverlay() || [] : [];
+			if (!aExtra.length) {
+				return aTours;
+			}
+			var mExtra = {};
+			aExtra.forEach(function (oTour) {
+				mExtra[oTour.id] = true;
+			});
+			return aTours.filter(function (oTour) {
+				return !mExtra[oTour.id];
+			}).concat(aExtra.map(function (oTour) {
+				return Object.assign({ isDraft: true }, oTour);
+			}));
+		});
+	};
 
 	TourRegistry.prototype.loadIndex = function () {
 		if (!this._pIndex) {
@@ -92,7 +122,7 @@ sap.ui.define(["sap/base/Log"], function (Log) {
 	};
 
 	TourRegistry.prototype.findTours = function (oContext) {
-		return this.loadIndex().then(function (aTours) {
+		return this.loadAll().then(function (aTours) {
 			return aTours.filter(function (oTour) {
 				return matches(oTour, oContext);
 			});
@@ -100,7 +130,7 @@ sap.ui.define(["sap/base/Log"], function (Log) {
 	};
 
 	TourRegistry.prototype.getById = function (sId) {
-		return this.loadIndex().then(function (aTours) {
+		return this.loadAll().then(function (aTours) {
 			return aTours.find(function (oTour) {
 				return oTour.id === sId;
 			});

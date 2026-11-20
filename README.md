@@ -14,7 +14,9 @@ powered by [ShepherdJS](https://github.com/shepherd-pro/shepherd).
 - **Interactive steps.** A step can wait for the user to click the highlighted element (`advanceOn`), wait for a
   dialog to open (`waitFor`) and skip itself when its element isn't on screen (`skipIfMissing`).
 - **Multilingual texts.** Any text can be `{ "en": "...", "de": "...", "th": "..." }`; the user's Fiori language is used.
-- **Lightweight.** ShepherdJS (50 KB) is only downloaded when a tour actually starts.
+- **Point-and-click tour editor.** Authors build tours inside the Launchpad: click "Add step", click a control,
+  type the text. No JSON or ids needed (see [Tour editor](#tour-editor-no-json-needed)).
+- **Lightweight.** ShepherdJS (50 KB) is only downloaded when a tour actually starts, and the editor only when an author opens it.
 
 ![Tour step highlighting the Create button](docs/create-step.png)
 
@@ -31,7 +33,9 @@ The sandbox Launchpad has one demo app ("Manage Sales Orders"). Open it and its 
 Use the header button (book icon) to start tours again. To see the auto-start once more, run
 `localStorage.clear()` in the browser console.
 
-An end-to-end smoke test (Playwright) drives the sandbox:
+Open `http://localhost:8080/test/flpSandbox.html?fiori-guide-editor=true` to try the tour editor.
+
+End-to-end tests (Playwright) drive the sandbox, one for the tours and one for the editor:
 
 ```bash
 npm run serve &    # dev server on port 8080
@@ -39,7 +43,31 @@ npx playwright --version || npm i -D playwright
 npm test
 ```
 
-## Writing tours
+## Tour editor (no JSON needed)
+
+![Tour editor](docs/editor-step.png)
+
+1. Open the Launchpad with `?fiori-guide-editor=true` in the URL (before the `#`), e.g.
+   `https://<host>/sap/bc/ui2/flp?fiori-guide-editor=true#SalesOrder-manage`. A pencil button appears in the shell header.
+2. Open the app you want to explain and press the pencil. The editor panel opens on the side (the ⟷ button moves it to the other side).
+3. Choose **+ New tour** (or pick an existing tour to change it) and give it a name.
+4. Press **Add step**, then click the element in the app the step should point at. The click does not trigger the app.
+   The editor shows what it picked and how reliable the reference is:
+   - *stable*: the control has an id from the app's view (e.g. `statusFilter`)
+   - *good*: found by type and text (e.g. the Button "Create")
+   - *fragile*: only a CSS path; pick a labeled element or its parent instead.
+   The ⤢ button switches to the surrounding, larger control (e.g. the whole filter instead of one of its buttons).
+5. Type a title and text, choose where the popup appears, and optionally tick
+   **Wait until the user clicks the element** for hands-on steps. **Add message** adds a centered step without an element.
+6. **Preview** plays the tour, **Save draft** keeps it in this browser (only you see it, as a normal tour in the Guided Tour button).
+7. **Export** produces the complete `index.json` (existing tours plus your drafts). Hand it to your Fiori administrator,
+   who replaces `tours/index.json` (or the file at `toursUrl`) and deploys. Saving a changed existing tour bumps its
+   `version`, so users see the updated tour once.
+
+`enableEditor` controls access: `"url"` (default, as above), `true` (always) or `false` (never, e.g. in production).
+Drafts never leave the author's browser until they are exported, so the editor is safe to leave on: other users see nothing.
+
+## Writing tours by hand
 
 Tours live in [`webapp/tours/`](webapp/tours). `index.json` is the catalog; each entry says which app a tour belongs to.
 
@@ -117,6 +145,7 @@ Defaults are in `manifest.json` (`sap.ui5/config/fioriGuide`). The Launchpad can
 | `autoStartDelay` | `1000` | Milliseconds to wait after the app loads before auto-starting. |
 | `showHeaderButton` | `true` | Show the Guided Tour button in the shell header. |
 | `hideButtonWithoutTours` | `true` | Hide the button in apps that have no tour. |
+| `enableEditor` | `"url"` | Tour editor access: `"url"` (with `?fiori-guide-editor=true`), `true` or `false`. |
 
 ## Starting tours from an app
 
@@ -159,13 +188,17 @@ webapp/
   lib/AppContext.js         intent, app id and in-app route of the current app
   lib/SeenStore.js          remembers finished tours (localStorage)
   lib/ShepherdLoader.js     lazy-loads ShepherdJS and its CSS
+  lib/DraftStore.js         editor drafts in localStorage
+  lib/editor/               tour editor (loaded on demand): TourEditor, ElementPicker, SelectorBuilder
   lib/thirdparty/           bundled ShepherdJS (generated, see below)
   css/guide.css             Fiori theme for the popups
+  css/editor.css            editor panel and element picker
   tours/                    tour catalog and step files
   test/flpSandbox.html      local Launchpad sandbox
   test/demoapp/             demo app used by the sandbox and the smoke test
 scripts/bundle-shepherd.mjs bundles ShepherdJS into webapp/lib/thirdparty
-scripts/smoke-test.mjs      Playwright end-to-end test
+scripts/smoke-test.mjs      Playwright end-to-end test of tours
+scripts/editor-test.mjs     Playwright end-to-end test of the editor
 ```
 
 ## ShepherdJS version and license

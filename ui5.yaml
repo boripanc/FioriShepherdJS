@@ -20,6 +20,8 @@ builder:
       # ShepherdJS is loaded lazily, only when a tour starts
       - "fiori/shepherd/guide/lib/thirdparty/**"
       - "fiori/shepherd/guide/test/**"
+      # the tour editor is loaded only when an author opens it
+      - "fiori/shepherd/guide/lib/editor/**"
   resources:
     excludes:
       - "/test/**"
