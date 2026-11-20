@@ -1,0 +1,96 @@
+/* Fiori look for ShepherdJS steps. Uses SAP theming CSS variables, so the popups follow
+   the user's theme (Horizon, Quartz, dark and high-contrast variants). */
+.shepherd-element.fioriGuideStep {
+	max-width: 22rem;
+	border-radius: var(--sapPopover_BorderCornerRadius, 0.75rem);
+	background: var(--sapGroup_ContentBackground, #fff);
+	box-shadow: var(--sapContent_Shadow2, 0 0.625rem 1.875rem 0 rgba(85, 107, 130, 0.15), 0 0 0 0.0625rem rgba(85, 107, 130, 0.15));
+	font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica, sans-serif);
+	color: var(--sapTextColor, #1d2d3e);
+	z-index: 10000;
+}
+
+.shepherd-element.fioriGuideStep .shepherd-arrow:before {
+	background: var(--sapGroup_ContentBackground, #fff);
+}
+
+.shepherd-element.fioriGuideStep.shepherd-has-title .shepherd-content .shepherd-header {
+	background: transparent;
+	padding: 1rem 1rem 0.25rem;
+}
+
+.shepherd-element.fioriGuideStep .shepherd-title {
+	font-family: var(--sapFontHeaderFamily, var(--sapFontFamily, "72", Arial, sans-serif));
+	font-size: var(--sapFontHeader5Size, 1rem);
+	font-weight: bold;
+	color: var(--sapTitleColor, #1d2d3e);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-cancel-icon {
+	color: var(--sapContent_IconColor, #556b82);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-text {
+	padding: 0.5rem 1rem 0.75rem;
+	font-size: var(--sapFontSize, 0.875rem);
+	line-height: 1.4;
+	color: var(--sapTextColor, #1d2d3e);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-text p {
+	margin: 0 0 0.5rem;
+}
+
+.shepherd-element.fioriGuideStep .shepherd-footer {
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.5rem 1rem 1rem;
+}
+
+.fioriGuideProgress {
+	margin-right: auto;
+	font-size: var(--sapFontSmallSize, 0.75rem);
+	color: var(--sapContent_LabelColor, #556b82);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-button.fioriGuideBtn {
+	margin: 0;
+	min-width: 4rem;
+	padding: 0 0.75rem;
+	height: 2.25rem;
+	border-radius: var(--sapButton_BorderCornerRadius, 0.5rem);
+	font-family: inherit;
+	font-size: var(--sapFontSize, 0.875rem);
+	font-weight: var(--sapButton_FontWeight, bold);
+	cursor: pointer;
+}
+
+.shepherd-element.fioriGuideStep .shepherd-button.fioriGuideBtnPrimary {
+	background: var(--sapButton_Emphasized_Background, #0070f2);
+	border: 1px solid var(--sapButton_Emphasized_BorderColor, #0070f2);
+	color: var(--sapButton_Emphasized_TextColor, #fff);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-button.fioriGuideBtnPrimary:not(:disabled):hover {
+	background: var(--sapButton_Emphasized_Hover_Background, #0064d9);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-button.fioriGuideBtnSecondary {
+	background: var(--sapButton_Background, #fff);
+	border: 1px solid var(--sapButton_BorderColor, #bcc3ca);
+	color: var(--sapButton_TextColor, #0064d9);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-button.fioriGuideBtnSecondary:not(:disabled):hover {
+	background: var(--sapButton_Hover_Background, #eaecee);
+}
+
+.shepherd-element.fioriGuideStep .shepherd-button:focus-visible {
+	outline: var(--sapContent_FocusWidth, 0.125rem) var(--sapContent_FocusStyle, solid) var(--sapContent_FocusColor, #0032a5);
+	outline-offset: 1px;
+}
+
+.shepherd-modal-overlay-container.shepherd-modal-is-visible {
+	opacity: 0.4;
+	z-index: 9999;
+}

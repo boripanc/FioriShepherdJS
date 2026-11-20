@@ -1,0 +1,19 @@
+{
+  "name": "fiori-shepherd-guide",
+  "version": "0.1.0",
+  "description": "SAP Fiori Launchpad plugin that shows guided tours (powered by ShepherdJS) inside Fiori apps.",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build:shepherd": "node scripts/bundle-shepherd.mjs",
+    "start": "ui5 serve --open test/flpSandbox.html",
+    "serve": "ui5 serve",
+    "build": "npm run build:shepherd && ui5 build --clean-dest",
+    "test": "node scripts/smoke-test.mjs"
+  },
+  "devDependencies": {
+    "@ui5/cli": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "shepherd.js": "13.0.0"
+  }
+}

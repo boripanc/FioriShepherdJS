@@ -1,0 +1,46 @@
+{
+	"steps": [
+		{
+			"id": "intro",
+			"title": { "en": "Manage Sales Orders", "de": "Kundenaufträge verwalten" },
+			"text": { "en": "<p>This short tour shows you how to find an order and create a new one.</p><p>You can restart it at any time with the <b>Guided Tour</b> button in the header.</p>", "de": "<p>Diese kurze Tour zeigt, wie Sie Aufträge finden und neue anlegen.</p>" }
+		},
+		{
+			"id": "search",
+			"title": "Search for orders",
+			"text": "Type a customer name or order number and press Enter.",
+			"target": { "controlId": "searchField" },
+			"position": "bottom"
+		},
+		{
+			"id": "table",
+			"title": "Your orders",
+			"text": "All orders you are responsible for. Click a row to see its details.",
+			"target": { "controlId": "ordersTable" },
+			"position": "top"
+		},
+		{
+			"id": "create",
+			"title": "Create an order",
+			"text": "Click <b>Create</b> to start a new sales order. Go ahead and try it now!",
+			"target": { "controlType": "sap.m.Button", "properties": { "text": "Create" } },
+			"position": "bottom-end",
+			"advanceOn": "click"
+		},
+		{
+			"id": "dialog",
+			"title": "Enter the details",
+			"text": "Fill in the customer and the net amount, then choose <b>Save</b>.",
+			"target": { "controlId": "createDialog" },
+			"position": "right",
+			"waitFor": 3000
+		},
+		{
+			"id": "optional",
+			"title": "Not on every screen",
+			"text": "Steps marked <code>skipIfMissing</code> are skipped when their element is not visible.",
+			"target": { "selector": "#doesNotExist" },
+			"skipIfMissing": true
+		}
+	]
+}

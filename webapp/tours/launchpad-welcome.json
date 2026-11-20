@@ -1,0 +1,29 @@
+{
+	"steps": [
+		{
+			"title": "Welcome!",
+			"text": "Let's take a quick look around the SAP Fiori launchpad."
+		},
+		{
+			"title": "Search",
+			"text": "Search for apps and business objects from here.",
+			"target": { "selector": "#sf, #shellSearchIcon, [id$='searchFieldInShell-input']" },
+			"position": "bottom",
+			"skipIfMissing": true
+		},
+		{
+			"title": "Your profile",
+			"text": "Open settings, change the theme or language, and sign out.",
+			"target": { "selector": "#meAreaHeaderButton, #userActionsMenuHeaderButton" },
+			"position": "bottom-end",
+			"skipIfMissing": true
+		},
+		{
+			"title": "Guided tours",
+			"text": "Whenever an app offers a tour, you'll find it behind this button.",
+			"target": { "controlId": "fioriShepherdGuideHeaderButton" },
+			"position": "bottom-end",
+			"skipIfMissing": true
+		}
+	]
+}

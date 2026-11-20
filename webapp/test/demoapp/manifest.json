@@ -1,0 +1,15 @@
+{
+	"_version": "1.42.0",
+	"sap.app": {
+		"id": "fiori.shepherd.guide.demo",
+		"type": "application",
+		"title": "Manage Sales Orders",
+		"applicationVersion": { "version": "1.0.0" }
+	},
+	"sap.ui": { "technology": "UI5", "deviceTypes": { "desktop": true, "tablet": true, "phone": true } },
+	"sap.ui5": {
+		"rootView": { "viewName": "fiori.shepherd.guide.demo.view.Main", "type": "XML", "id": "main" },
+		"dependencies": { "minUI5Version": "1.84.0", "libs": { "sap.m": {} } },
+		"contentDensities": { "compact": true, "cozy": true }
+	}
+}

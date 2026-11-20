@@ -1,0 +1,25 @@
+specVersion: "4.0"
+metadata:
+  name: fiori.shepherd.guide
+type: application
+framework:
+  name: SAPUI5
+  version: "1.136.24"
+  libraries:
+    - name: sap.m
+    - name: sap.ui.core
+    - name: sap.ushell
+    - name: sap.f
+      development: true
+    - name: sap.ui.layout
+      development: true
+    - name: themelib_sap_horizon
+builder:
+  componentPreload:
+    excludes:
+      # ShepherdJS is loaded lazily, only when a tour starts
+      - "fiori/shepherd/guide/lib/thirdparty/**"
+      - "fiori/shepherd/guide/test/**"
+  resources:
+    excludes:
+      - "/test/**"
