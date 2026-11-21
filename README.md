@@ -13,6 +13,9 @@ powered by [ShepherdJS](https://github.com/shepherd-pro/shepherd).
   because Launchpad-generated DOM ids are long and unstable.
 - **Interactive steps.** A step can wait for the user to click the highlighted element (`advanceOn`), wait for a
   dialog to open (`waitFor`) and skip itself when its element isn't on screen (`skipIfMissing`).
+- **Tours across apps and reloads.** A tour can start on the Launchpad home page, go on in an app and end in
+  SAP GUI. It pauses when the user is somewhere else and goes on by itself, also after a page reload
+  (see [Tours across apps](#tours-across-apps)).
 - **Multilingual texts.** Any text can be `{ "en": "...", "de": "...", "th": "..." }`; the user's Fiori language is used.
 - **Point-and-click tour editor.** Authors build tours inside the Launchpad: click "Add step", click a control,
   type the text. No JSON or ids needed (see [Tour editor](#tour-editor-no-json-needed)).
@@ -104,6 +107,46 @@ from a different server, and the desktop SAP GUI (SAP Logon) is outside the brow
 The command field is found by its id `ToolbarOkCode` (and older variants); this was tested against a mock SAP GUI page,
 so please try it on your system's SAP GUI for HTML first.
 
+## Tours across apps
+
+A tour keeps going when the user moves from one screen or app to the next:
+
+- **Inside one app** (list to object page, SAP GUI screen to screen): nothing to do. Each step waits up to
+  `waitFor` ms for its element.
+- **Into another app:** give the first step of the new app an `app` field. Steps after it stay in that app until
+  the next `app`. Example ([`tours/order-journey.json`](webapp/tours/order-journey.json)): Launchpad home, then
+  Manage Sales Orders, then SAP GUI.
+
+```json
+{ "title": "Open the app", "target": { "controlType": "sap.m.GenericTile", "properties": { "header": "Manage Sales Orders" } }, "advanceOn": "click" },
+{ "title": "Check existing orders", "app": "SalesOrder-manage", "target": { "controlId": "searchField" } },
+{ "title": "Create the order in SAP GUI", "text": "Press Next to open VA01." },
+{ "title": "Start the transaction", "app": { "intent": "SalesDocument-createGui", "hash": "#SalesDocument-createGui" }, "tcode": "VA01" }
+```
+
+How it behaves:
+
+- When the user clicks a tile or link that opens the next app, the tour goes on there by itself.
+- When the user presses **Next** and the next step is in another app, the plugin opens that app (from `hash`, or
+  from `intent` when it has no wildcard).
+- **Page reload (F5):** the tour comes back at the step the user was on.
+- **The user goes somewhere else:** the tour pauses. It goes on by itself when the user opens the app again, and the
+  Guided Tour button offers "Continue …" (which opens the right app) or "End the paused tour".
+- **Back** is not offered into the previous app. Closing a tour (X or Esc) ends it for good.
+- The progress is kept in the browser tab's `sessionStorage` for `resumeMinutes` (default 30). It is not shared with
+  other tabs, so an app that opens in a **new browser tab or window** starts without the tour.
+
+![Guided Tour button offering to continue a paused tour](docs/journey-continue.png)
+
+In the [tour editor](#tour-editor-no-json-needed), keep the editor open and go to the next app: the tour stays open,
+and steps added there are saved with that app. Once a tour spans several apps, the step list shows each step's app.
+**Preview** opens the tour's first app.
+
+| `app` form | Meaning |
+|---|---|
+| `"SalesOrder-manage"` | An intent, wildcards allowed (`SalesOrder-*`), or a list of them. |
+| `{ "intent": "...", "appId": "...", "innerHash": "^SalesOrder\\(", "hash": "#SalesOrder-manage&/orders" }` | Full form: app id, in-app route (regular expression) and the hash that Next / Continue open. |
+
 ## Writing tours by hand
 
 Tours live in [`webapp/tours/`](webapp/tours). `index.json` is the catalog; each entry says which app a tour belongs to.
@@ -159,6 +202,7 @@ A steps file:
 | `tcode` | `"VA01"`: transaction code step in SAP GUI for HTML (command field, ignores `/n` `/o`, continues on Enter). |
 | `canClickTarget` | `false` blocks clicks on the highlighted element. |
 | `classes` | Extra CSS classes for the popup. |
+| `app` | The app this step (and the ones after it) is shown in, for [tours across apps](#tours-across-apps). |
 
 ### Targets
 
@@ -186,6 +230,7 @@ Defaults are in `manifest.json` (`sap.ui5/config/fioriGuide`). The Launchpad can
 | `autoStartDelay` | `1000` | Milliseconds to wait after the app loads before auto-starting. |
 | `showHeaderButton` | `true` | Show the Guided Tour button in the shell header. |
 | `hideButtonWithoutTours` | `true` | Hide the button in apps that have no tour. |
+| `resumeMinutes` | `30` | How long a paused or interrupted tour can be continued (in this browser tab). |
 | `enableEditor` | `"url"` | Tour editor access: `"url"` (with `?fiori-guide-editor=true`), `true` or `false`. |
 
 ## Starting tours from an app
@@ -224,7 +269,9 @@ webapp/
   Component.js              plugin entry: config, header button, app tracking, auto-start, EventBus API
   manifest.json             sap.flp.type = plugin, Shell-plugin inbound, default config
   lib/TourRegistry.js       loads the catalog and matches tours to the current app
-  lib/TourRunner.js         turns tour JSON into a Shepherd tour (buttons, progress, advanceOn, waiting)
+  lib/TourRunner.js         turns tour JSON into a Shepherd tour (buttons, progress, advanceOn, waiting, pausing)
+  lib/TourSession.js        the tour in progress, so it goes on in another app or after a reload (sessionStorage)
+  lib/AppMatch.js           does "where the user is" match a tour's or step's app
   lib/TargetResolver.js     finds the DOM element for a step (controlId / controlType / CSS)
   lib/AppContext.js         intent, app id and in-app route of the current app
   lib/SeenStore.js          remembers finished tours (localStorage)
@@ -240,6 +287,8 @@ webapp/
 scripts/bundle-shepherd.mjs bundles ShepherdJS into webapp/lib/thirdparty
 scripts/smoke-test.mjs      Playwright end-to-end test of tours
 scripts/editor-test.mjs     Playwright end-to-end test of the editor
+scripts/journey-test.mjs    Playwright test of a tour across apps, reload and pause/continue
+scripts/editor-journey-test.mjs  Playwright test of recording a tour across apps in the editor
 ```
 
 ## ShepherdJS version and license

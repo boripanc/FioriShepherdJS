@@ -1,0 +1,50 @@
+{
+	"$comment": "A tour that goes across apps: Launchpad home -> Manage Sales Orders -> SAP GUI (VA01). Steps with \"app\" are shown in that app; the tour pauses in between and goes on after a page reload too.",
+	"steps": [
+		{
+			"id": "welcome",
+			"title": "From the Launchpad to SAP GUI",
+			"text": "This tour takes you through two apps. It goes on by itself when the next app opens."
+		},
+		{
+			"id": "open-app",
+			"title": "Open the app",
+			"text": "Click the <b>Manage Sales Orders</b> tile.",
+			"target": { "controlType": "sap.m.GenericTile", "properties": { "header": "Manage Sales Orders" } },
+			"advanceOn": "click",
+			"position": "bottom"
+		},
+		{
+			"id": "search",
+			"app": "SalesOrder-manage",
+			"title": "Check existing orders",
+			"text": "Before you create an order, search here to see whether the customer already has one.",
+			"target": { "controlId": "searchField" },
+			"position": "bottom"
+		},
+		{
+			"id": "to-gui",
+			"title": "Create the order in SAP GUI",
+			"text": "Orders are created with transaction VA01. Press <b>Next</b> to open it."
+		},
+		{
+			"id": "tcode",
+			"app": { "intent": "SalesDocument-createGui", "hash": "#SalesDocument-createGui" },
+			"title": "Start the transaction",
+			"text": "Type the transaction code and press <b>Enter</b>.",
+			"tcode": "VA01",
+			"position": "bottom-start",
+			"waitFor": 10000
+		},
+		{
+			"id": "order-type",
+			"title": "Order type",
+			"text": "Enter the order type for a standard order.",
+			"target": { "frame": true, "selector": "[title='Sales Document Type']" },
+			"expectValue": "OR",
+			"advanceOn": "input",
+			"position": "right",
+			"waitFor": 8000
+		}
+	]
+}

@@ -6,6 +6,9 @@
  * find that control again (see SelectorBuilder), so nobody has to deal with ids or JSON.
  * Tours are saved as drafts in the browser (visible only to the author) and exported as
  * index.json for deployment.
+ *
+ * A tour can go across apps: the author keeps the editor open, opens the next app and adds
+ * more steps there. Those steps remember their app ("app" in the tour JSON).
  */
 sap.ui.define([
 	"sap/ui/model/json/JSONModel",
@@ -37,10 +40,11 @@ sap.ui.define([
 	"../TargetResolver",
 	"./ElementPicker",
 	"./SelectorBuilder",
-	"../DraftStore"
+	"../DraftStore",
+	"../AppMatch"
 ], function (JSONModel, Page, Bar, Title, Button, Label, Input, TextArea, CheckBox, Select, List, CustomListItem,
 	HBox, VBox, MText, ObjectStatus, Toolbar, ToolbarSpacer, OverflowToolbar, MessageToast, MessageStrip, Dialog, Item, Icon,
-	includeStylesheet, Text, TargetResolver, ElementPicker, SelectorBuilder, DraftStore) {
+	includeStylesheet, Text, TargetResolver, ElementPicker, SelectorBuilder, DraftStore, AppMatch) {
 	"use strict";
 
 	var NEW_TOUR_KEY = "__new";
@@ -133,12 +137,27 @@ sap.ui.define([
 			this._oModel.setProperty("/context", oContext);
 			return; // keep unsaved work while moving around inside the same app
 		}
+		var oTour = this._oModel.getProperty("/tour");
+		if (oPrevious && oTour && (this._oModel.getProperty("/dirty") || (oTour.steps || []).length)) {
+			// the author went on to another app: keep the tour, the next steps belong to this app
+			return this._oPlugin.getToursForContext().then(function (aTours) {
+				var sKey = that._oModel.getProperty("/selectedTourKey");
+				var aItems = that._tourItems(aTours);
+				if (!aItems.some(function (oItem) {
+					return oItem.key === sKey;
+				})) {
+					aItems.push({ key: sKey, text: oTour.title || that.t("editor.untitled") });
+				}
+				that._oModel.setProperty("/context", oContext);
+				that._oModel.setProperty("/tours", aItems);
+				that._oModel.setProperty("/selectedTourKey", sKey);
+				that._refreshStepStates();
+			});
+		}
 		return this._oPlugin.getToursForContext().then(function (aTours) {
 			that._oModel.setData({
 				context: oContext,
-				tours: [{ key: NEW_TOUR_KEY, text: that.t("editor.newTour") }].concat(aTours.map(function (oTour) {
-					return { key: oTour.id, text: (Text.resolve(oTour.title) || oTour.id) + (DraftStore.get(oTour.id) ? " " + that.t("editor.draftSuffix") : "") };
-				})),
+				tours: that._tourItems(aTours),
 				selectedTourKey: aTours.length ? aTours[0].id : NEW_TOUR_KEY,
 				tour: null,
 				selectedStep: -1,
@@ -149,6 +168,59 @@ sap.ui.define([
 			});
 			return that._loadTour(that._oModel.getProperty("/selectedTourKey"));
 		});
+	};
+
+	TourEditor.prototype._tourItems = function (aTours) {
+		var that = this;
+		return [{ key: NEW_TOUR_KEY, text: this.t("editor.newTour") }].concat(aTours.map(function (oTour) {
+			return { key: oTour.id, text: (Text.resolve(oTour.title) || oTour.id) + (DraftStore.get(oTour.id) ? " " + that.t("editor.draftSuffix") : "") };
+		}));
+	};
+
+	/**
+	 * The app of each step as AppMatch descriptions, the same way the tour runner sees it.
+	 * New steps carry the app they were picked in (pickContext) until they are saved.
+	 */
+	TourEditor.prototype._stepApps = function () {
+		var oTour = this._oModel.getProperty("/tour") || {};
+		var oContext = this._oModel.getProperty("/context") || {};
+		var oPrev = { intent: oTour.intent || oContext.intent, appId: oTour.appId };
+		return (oTour.steps || []).map(function (oStep) {
+			if (oStep.app) {
+				oPrev = AppMatch.normalize(oStep.app);
+			} else if (oStep.pickContext && !AppMatch.matches(oPrev, oStep.pickContext, true)) {
+				oPrev = { intent: oStep.pickContext.intent };
+			}
+			return oPrev;
+		});
+	};
+
+	/** Updates "is the element on screen" and "which app" for every step. */
+	TourEditor.prototype._refreshStepStates = function () {
+		var that = this;
+		var oTour = this._oModel.getProperty("/tour");
+		if (!oTour) {
+			return;
+		}
+		var oContext = this._oModel.getProperty("/context") || {};
+		var oTourApp = { intent: oTour.intent || oContext.intent, appId: oTour.appId };
+		var aApps = this._stepApps();
+		// label every step with its app once the tour goes across apps
+		var bSeveralApps = aApps.some(function (oApp) {
+			return JSON.stringify(oApp) !== JSON.stringify(oTourApp);
+		});
+		(oTour.steps || []).forEach(function (oStep, i) {
+			var bHere = AppMatch.matches(aApps[i], oContext, true);
+			oStep.appLabel = bSeveralApps ? that.t("editor.stepApp", [AppMatch.labelOf(aApps[i])]) : "";
+			if (!oStep.target) {
+				oStep.quality = "none";
+			} else if (!bHere) {
+				oStep.quality = "otherApp";
+			} else if (oStep.quality !== "fragile") {
+				oStep.quality = TargetResolver.resolve(oStep.target) ? "found" : "missing";
+			}
+		});
+		this._oModel.refresh(true);
 	};
 
 	TourEditor.prototype._loadTour = function (sKey) {
@@ -202,6 +274,7 @@ sap.ui.define([
 		this._oModel.setProperty("/tour", oTour);
 		this._oModel.setProperty("/selectedStep", -1);
 		this._oModel.setProperty("/dirty", false);
+		this._refreshStepStates();
 		this._showStep(-1);
 	};
 
@@ -262,13 +335,18 @@ sap.ui.define([
 										new MText({ text: { path: "title", formatter: function (sTitle) {
 											return sTitle || that.t("editor.untitled");
 										} }, maxLines: 1 }).addStyleClass("fioriGuideEditorStepTitle"),
-										new MText({ text: "{targetLabel}", maxLines: 1 }).addStyleClass("fioriGuideEditorStepTarget")
+										new MText({ text: { parts: ["appLabel", "targetLabel"], formatter: function (sApp, sTarget) {
+											return sApp ? sApp + " \u00b7 " + (sTarget || "") : sTarget;
+										} }, maxLines: 1 }).addStyleClass("fioriGuideEditorStepTarget")
 									]
 								}).addStyleClass("fioriGuideEditorStepText"),
 								new Icon({
 									src: { parts: ["quality", "advance"], formatter: function (sQuality, sAdvance) {
 										if (sQuality === "missing" || sQuality === "fragile") {
 											return "sap-icon://message-warning";
+										}
+										if (sQuality === "otherApp") {
+											return "sap-icon://chain-link";
 										}
 										if (sAdvance === "typeEnter" || sAdvance === "type") {
 											return "sap-icon://keyboard-and-mouse";
@@ -281,6 +359,9 @@ sap.ui.define([
 									tooltip: { path: "quality", formatter: function (sQuality) {
 										if (sQuality === "missing") {
 											return that.t("editor.targetMissing");
+										}
+										if (sQuality === "otherApp") {
+											return that.t("editor.otherApp");
 										}
 										return sQuality === "fragile" ? that.t("editor.quality.fragile") : "";
 									} }
@@ -462,6 +543,22 @@ sap.ui.define([
 		this._oRoot.classList.toggle("fioriGuideEditorLeft");
 	};
 
+	/** The app a new step is added in. */
+	TourEditor.prototype._pickContext = function () {
+		var oContext = this._oPlugin.getContext() || this._oModel.getProperty("/context") || {};
+		return { intent: oContext.intent, appId: oContext.appId || undefined };
+	};
+
+	/** Adds a new step and selects it. */
+	TourEditor.prototype._appendStep = function (oStep) {
+		var aSteps = this._steps().slice();
+		aSteps.push(Object.assign({ pickContext: this._pickContext() }, oStep));
+		this._oModel.setProperty("/tour/steps", aSteps);
+		this._markDirty();
+		this._refreshStepStates();
+		this._showStep(aSteps.length - 1);
+	};
+
 	TourEditor.prototype._fromPick = function (oPick) {
 		// the picked control is kept outside the model (not serializable) for "Larger area"
 		this._mPicks = this._mPicks || {};
@@ -491,11 +588,7 @@ sap.ui.define([
 			if (!oPick) {
 				return;
 			}
-			var aSteps = that._steps().slice();
-			aSteps.push(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false }, that._fromPick(oPick)));
-			that._oModel.setProperty("/tour/steps", aSteps);
-			that._markDirty();
-			that._showStep(aSteps.length - 1);
+			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false }, that._fromPick(oPick)));
 			that._focusStepTitle();
 			if (oPick.quality === "fragile") {
 				MessageToast.show(that.t("editor.fragileHint"), { duration: 6000 });
@@ -504,11 +597,7 @@ sap.ui.define([
 	};
 
 	TourEditor.prototype._addMessageStep = function () {
-		var aSteps = this._steps().slice();
-		aSteps.push({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
-		this._oModel.setProperty("/tour/steps", aSteps);
-		this._markDirty();
-		this._showStep(aSteps.length - 1);
+		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
 		this._focusStepTitle();
 	};
 
@@ -530,8 +619,7 @@ sap.ui.define([
 			if (!oPick) {
 				return;
 			}
-			var aSteps = that._steps().slice();
-			aSteps.push(Object.assign({
+			that._appendStep(Object.assign({
 				title: that.t("editor.tcodeDefaultTitle"),
 				text: that.t("editor.tcodeDefaultText"),
 				position: "bottom-start",
@@ -539,9 +627,6 @@ sap.ui.define([
 				expectValue: "",
 				tcode: true
 			}, that._fromPick(oPick)));
-			that._oModel.setProperty("/tour/steps", aSteps);
-			that._markDirty();
-			that._showStep(aSteps.length - 1);
 			setTimeout(function () {
 				var oInput = sap.ui.getCore().byId("fioriGuideEditorExpectValue");
 				if (oInput) {
@@ -619,6 +704,7 @@ sap.ui.define([
 		var oStep = aSteps.splice(iIndex, 1)[0];
 		aSteps.splice(iNew, 0, oStep);
 		this._oModel.setProperty("/tour/steps", aSteps);
+		this._refreshStepStates();
 		this._markDirty();
 		this._showStep(iNew);
 	};
@@ -631,6 +717,7 @@ sap.ui.define([
 		}
 		aSteps.splice(iIndex, 1);
 		this._oModel.setProperty("/tour/steps", aSteps);
+		this._refreshStepStates();
 		this._markDirty();
 		this._showStep(Math.min(iIndex, aSteps.length - 1));
 	};
@@ -668,12 +755,21 @@ sap.ui.define([
 		if (oTour.onlyThisScreen) {
 			oDef.innerHash = oTour.innerHash !== undefined ? oTour.innerHash : screenPattern(oContext.innerHash);
 		}
+		var oPrevApp = { intent: oDef.intent, appId: oDef.appId };
 		oDef.steps = (oTour.steps || []).map(function (oStep, i) {
 			var oOut = {
 				id: oStep.id || "step-" + (i + 1),
 				title: i18nValue(oStep.titleI18n, oStep.title || ""),
 				text: i18nValue(oStep.textI18n, oStep.text || "")
 			};
+			// a step added in another app than the step before it belongs to that app
+			if (oStep.app) {
+				oOut.app = oStep.app;
+				oPrevApp = AppMatch.normalize(oStep.app);
+			} else if (oStep.pickContext && oStep.pickContext.intent && !AppMatch.matches(oPrevApp, oStep.pickContext, true)) {
+				oOut.app = oStep.pickContext.intent;
+				oPrevApp = { intent: oOut.app };
+			}
 			if (oStep.target) {
 				oOut.target = oStep.target;
 				oOut.position = oStep.position || "bottom";

@@ -11,7 +11,7 @@
  *   version    bump to auto-start the tour again for users who already saw it
  *   url        file with the steps, relative to the catalog; or put "steps" inline
  */
-sap.ui.define(["sap/base/Log"], function (Log) {
+sap.ui.define(["sap/base/Log", "./AppMatch"], function (Log, AppMatch) {
 	"use strict";
 
 	function fetchJson(sUrl) {
@@ -23,47 +23,8 @@ sap.ui.define(["sap/base/Log"], function (Log) {
 		});
 	}
 
-	function toArray(v) {
-		if (v === undefined || v === null || v === "") {
-			return [];
-		}
-		return Array.isArray(v) ? v : [v];
-	}
-
-	function wildcardMatch(sPattern, sValue) {
-		if (sPattern === "*") {
-			return true;
-		}
-		var sRegex = "^" + sPattern.split("*").map(function (sPart) {
-			return sPart.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-		}).join(".*") + "$";
-		return new RegExp(sRegex).test(sValue);
-	}
-
 	function matches(oTour, oContext) {
-		var aIntents = toArray(oTour.intent);
-		var aAppIds = toArray(oTour.appId);
-		if (!aIntents.length && !aAppIds.length) {
-			return false;
-		}
-		var bIntentOk = aIntents.some(function (s) {
-			return wildcardMatch(s, oContext.intent);
-		});
-		var bAppOk = aAppIds.some(function (s) {
-			return wildcardMatch(s, oContext.appId || "");
-		});
-		if (!bIntentOk && !bAppOk) {
-			return false;
-		}
-		if (oTour.innerHash !== undefined) {
-			try {
-				return new RegExp(oTour.innerHash).test(oContext.innerHash || "");
-			} catch (e) {
-				Log.error("Invalid innerHash pattern in tour " + oTour.id, e, "fiori.shepherd.guide");
-				return false;
-			}
-		}
-		return true;
+		return AppMatch.matches(oTour, oContext);
 	}
 
 	function TourRegistry(sBaseUrl) {

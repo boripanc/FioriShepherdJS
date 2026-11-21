@@ -16,6 +16,19 @@
 			"url": "launchpad-welcome.json"
 		},
 		{
+			"id": "order-journey",
+			"title": {
+				"en": "From the Launchpad to a sales order in SAP GUI"
+			},
+			"intent": [
+				"Shell-home",
+				"Launchpad-openFLPPage"
+			],
+			"autoStart": false,
+			"version": 1,
+			"url": "order-journey.json"
+		},
+		{
 			"id": "salesorder-overview",
 			"title": {
 				"en": "Find and create sales orders",

@@ -13,7 +13,7 @@
 sap.ui.define(["../TargetResolver"], function (TargetResolver) {
 	"use strict";
 
-	var IDENTIFYING_PROPERTIES = ["text", "title", "label", "tooltip", "placeholder", "headerText", "name", "icon", "key"];
+	var IDENTIFYING_PROPERTIES = ["text", "title", "label", "tooltip", "placeholder", "header", "headerText", "name", "icon", "key"];
 	var MAX_PARENT_LEVELS = 6;
 
 	function registryGet(sId) {

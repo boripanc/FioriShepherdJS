@@ -31,6 +31,7 @@ try {
 	await page.waitForTimeout(1500);
 	check(await page.locator(".shepherd-element").count() === 0, "Home tour does not auto-start");
 	await page.click("#fioriShepherdGuideHeaderButton");
+	await page.click(".sapMActionSheet .sapMBtn:has-text('Welcome to the Launchpad')", { timeout: 10000 });
 	await page.waitForSelector(".shepherd-element", { timeout: 10000 });
 	check((await stepTitle()).trim() === "Welcome!", "Home tour starts from the header button");
 	await page.waitForTimeout(500);
