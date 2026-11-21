@@ -18,6 +18,11 @@
  *   showNext       keep the Next button although advanceOn is set
  *   canClickTarget false blocks clicks on the highlighted element (default true)
  *   classes        extra CSS classes for the step popup
+ *   app            the app this step is shown in, for tours that move on to another app (see
+ *                  AppMatch): "SalesOrder-manage", or { intent, appId, innerHash, hash }.
+ *                  A step without it stays in the app of the step before (the first steps: the
+ *                  tour's own intent / appId). When the user is somewhere else, the tour pauses
+ *                  and goes on by itself once the user opens that app.
  *
  * Tour fields: steps (required), modal (default true: dims the rest of the screen).
  */
@@ -26,40 +31,110 @@ sap.ui.define([
 	"./TargetResolver",
 	"./Text",
 	"./FrameProxy",
-	"./InputCheck"
-], function (ShepherdLoader, TargetResolver, Text, FrameProxy, InputCheck) {
+	"./InputCheck",
+	"./AppMatch"
+], function (ShepherdLoader, TargetResolver, Text, FrameProxy, InputCheck, AppMatch) {
 	"use strict";
+
+	var RESUME_WAIT_MS = 10000; // a freshly opened app may need a while to render its controls
 
 	function TourRunner(mSettings) {
 		this._oBundle = mSettings.bundle;
 		this._oTour = null;
+		this._oRun = null;
+		this._iStarting = 0;
 	}
 
+	/**
+	 * The app each step belongs to (see the "app" step field), as AppMatch descriptions.
+	 * Steps before the first "app" belong to the tour's own apps (intent / appId, without
+	 * innerHash, so that moving around inside the app keeps the tour going).
+	 */
+	TourRunner.stepApps = function (oDef) {
+		var oCurrent = { intent: oDef.intent, appId: oDef.appId };
+		return (oDef.steps || []).filter(Boolean).map(function (oStep) {
+			if (oStep.app) {
+				oCurrent = AppMatch.normalize(oStep.app);
+			}
+			return oCurrent;
+		});
+	};
+
+	function sameApp(oA, oB) {
+		return JSON.stringify(oA) === JSON.stringify(oB);
+	}
+
+	/**
+	 * Where to go on with a paused tour in this app: the step it stopped at, or the step after it
+	 * (the user opened the next app themselves). -1 when neither belongs to this app.
+	 */
+	TourRunner.resumeIndex = function (oDef, iIndex, oContext) {
+		var aApps = TourRunner.stepApps(oDef);
+		if (aApps[iIndex] && AppMatch.matches(aApps[iIndex], oContext, true)) {
+			return iIndex;
+		}
+		if (aApps[iIndex + 1] && AppMatch.matches(aApps[iIndex + 1], oContext, true)) {
+			return iIndex + 1;
+		}
+		return -1;
+	};
+
 	TourRunner.prototype.isActive = function () {
-		return !!(this._oTour && this._oTour.isActive());
+		return !!(this._oTour && this._oTour.isActive() && !(this._oRun && this._oRun.pausing));
+	};
+
+	/** Active, or about to start. */
+	TourRunner.prototype.isBusy = function () {
+		return this._iStarting > 0 || this.isActive();
 	};
 
 	TourRunner.prototype.cancel = function () {
-		if (this.isActive()) {
+		if (this._oTour && this._oTour.isActive()) {
 			this._oTour.cancel();
 		}
 	};
 
 	/**
+	 * The user moved somewhere else (another app or screen). If the current step does not belong
+	 * there, the tour pauses; whoever owns the tour resumes it later with start({startAt}).
+	 * @param {object} oContext from AppContext.fromHash
+	 */
+	TourRunner.prototype.notifyContext = function (oContext) {
+		var oRun = this._oRun;
+		if (!this.isActive() || !oRun || oRun.waiting) {
+			return; // a step that is still waiting for its element checks the app itself
+		}
+		var iIndex = this._oTour.steps.indexOf(this._oTour.getCurrentStep());
+		if (iIndex >= 0 && !oRun.matches(iIndex, oContext)) {
+			oRun.pause(iIndex, false, true);
+		}
+	};
+
+	/**
 	 * @param {object} oDef tour definition (catalog entry merged with its steps)
-	 * @param {{onFinish: function}} [mOptions]
+	 * @param {object} [mOptions]
+	 * @param {function} [mOptions.onFinish] the user finished or closed the tour
+	 * @param {function(number)} [mOptions.onStep] a step is about to be shown (index)
+	 * @param {function(number, object, boolean)} [mOptions.onPause] the tour paused because the
+	 *        step (index) belongs to another app (AppMatch description); true: the user pressed
+	 *        Next, so it is fine to open that app for them
+	 * @param {function(): object} [mOptions.getContext] where the user is now (AppContext)
+	 * @param {number} [mOptions.startAt] index of the first step to show (resuming a tour)
 	 * @returns {Promise<object>} the Shepherd tour once started
 	 */
 	TourRunner.prototype.start = function (oDef, mOptions) {
 		var that = this;
 		mOptions = mOptions || {};
+		this._iStarting++;
 		return ShepherdLoader.load().then(function (Shepherd) {
+			that._iStarting--;
 			that.cancel();
 
 			var aSteps = (oDef.steps || []).filter(Boolean);
 			if (!aSteps.length) {
 				throw new Error("Tour " + oDef.id + " has no steps");
 			}
+			var iStartAt = Math.min(Math.max(mOptions.startAt || 0, 0), aSteps.length - 1);
 
 			var oTour = new Shepherd.Tour({
 				tourName: oDef.id,
@@ -75,13 +150,55 @@ sap.ui.define([
 				}
 			});
 
+			var aApps = TourRunner.stepApps(oDef);
+			var oRun = {
+				apps: aApps,
+				skipBefore: iStartAt, // steps before this are skipped (once) when resuming
+				resumed: iStartAt > 0 || !!mOptions.resumed,
+				lastShown: -1,
+				waiting: false,
+				pausing: false,
+				navigateOnPause: false,
+				matches: function (i, oContext) {
+					return AppMatch.matches(aApps[i], oContext, true);
+				},
+				currentContext: function () {
+					return mOptions.getContext ? mOptions.getContext() : null;
+				},
+				stepStarts: function (i) {
+					if (mOptions.onStep) {
+						mOptions.onStep(i);
+					}
+				},
+				/** Ends the Shepherd tour but keeps it "in progress", to go on with start({startAt}). */
+				pause: function (i, bNavigate, bNow) {
+					if (oRun.pausing) {
+						return;
+					}
+					oRun.pausing = true;
+					if (mOptions.onPause) {
+						mOptions.onPause(i, aApps[i], !!bNavigate);
+					}
+					var fnEnd = function () {
+						if (oTour.isActive()) {
+							oTour.cancel();
+						}
+					};
+					if (bNow) {
+						fnEnd();
+					} else {
+						setTimeout(fnEnd, 0); // not while Shepherd is in the middle of showing a step
+					}
+				}
+			};
+
 			aSteps.forEach(function (oStep, i) {
-				oTour.addStep(that._buildStep(oTour, oStep, i, aSteps.length));
+				oTour.addStep(that._buildStep(oTour, oStep, i, aSteps.length, oRun));
 			});
 
 			var bFinished = false;
 			var fnFinish = function () {
-				if (!bFinished) {
+				if (!bFinished && !oRun.pausing) {
 					bFinished = true;
 					if (mOptions.onFinish) {
 						mOptions.onFinish();
@@ -92,8 +209,12 @@ sap.ui.define([
 			oTour.on("cancel", fnFinish);
 
 			that._oTour = oTour;
+			that._oRun = oRun;
 			oTour.start();
 			return oTour;
+		}, function (oError) {
+			that._iStarting--;
+			throw oError;
 		});
 	};
 
@@ -116,7 +237,7 @@ sap.ui.define([
 		return oOut;
 	}
 
-	TourRunner.prototype._buildStep = function (oTour, oStepIn, iIndex, iCount) {
+	TourRunner.prototype._buildStep = function (oTour, oStepIn, iIndex, iCount, oRun) {
 		var oBundle = this._oBundle;
 		var oStep = normalizeStep(oStepIn);
 		var bLast = iIndex === iCount - 1;
@@ -132,12 +253,15 @@ sap.ui.define([
 		var oProxy = null; // stand-in in the Launchpad page for elements inside an iframe
 		var aCleanup = [];
 
-		function goOn() {
+		function goOn(bFromButton) {
 			if (oTour.isActive() && oTour.getCurrentStep() && oTour.getCurrentStep().id === sStepId) {
 				if (bLast) {
 					oTour.complete();
 				} else {
+					// Next may lead into another app: then it is fine to open that app for the user
+					oRun.navigateOnPause = bFromButton === true;
 					oTour.next();
+					oRun.navigateOnPause = false;
 				}
 			}
 		}
@@ -150,7 +274,8 @@ sap.ui.define([
 		}
 
 		var aButtons = [];
-		if (iIndex > 0) {
+		// going back into another app would only make the tour disappear
+		if (iIndex > 0 && sameApp(oRun.apps[iIndex - 1], oRun.apps[iIndex])) {
 			aButtons.push({
 				text: oBundle.getText("btnBack"),
 				classes: "fioriGuideBtn fioriGuideBtnSecondary",
@@ -164,7 +289,9 @@ sap.ui.define([
 			aButtons.push({
 				text: oBundle.getText(bLast ? "btnDone" : "btnNext"),
 				classes: "fioriGuideBtn fioriGuideBtnPrimary",
-				action: goOn
+				action: function () {
+					goOn(true);
+				}
 			});
 		}
 
@@ -200,7 +327,7 @@ sap.ui.define([
 				var bRight = isRight();
 				oBox.classList.toggle("fioriGuideExpectOk", bRight);
 				oBox.classList.toggle("fioriGuideExpectError", !bRight && !!bShowError);
-				oState.textContent = bRight ? "\u2713" : bShowError ? oBundle.getText("typeWrong", [sShown]) : "";
+				oState.textContent = bRight ? "✓" : bShowError ? oBundle.getText("typeWrong", [sShown]) : "";
 			}
 			var bDone = false;
 			listen(oInput, "input", function () {
@@ -249,6 +376,8 @@ sap.ui.define([
 			canClickTarget: oStep.canClickTarget !== false,
 			when: {
 				show: function () {
+					oRun.lastShown = iIndex;
+					oRun.resumed = false;
 					var oStepEl = this.getElement();
 					var oFooter = oStepEl && oStepEl.querySelector(".shepherd-footer");
 					if (oFooter && iCount > 1) {
@@ -286,6 +415,69 @@ sap.ui.define([
 			oOptions.classes = "fioriGuideStep " + oStep.classes;
 		}
 
+		/**
+		 * false (and the tour pauses) when the user is not in this step's app. Going back into
+		 * another app (keyboard arrows) shows the step the user came from again instead.
+		 */
+		function checkApp() {
+			var oContext = oRun.currentContext();
+			if (!oContext || oRun.matches(iIndex, oContext)) {
+				return true;
+			}
+			if (oRun.lastShown > iIndex && oRun.matches(oRun.lastShown, oContext)) {
+				var iBack = oRun.lastShown;
+				setTimeout(function () {
+					oTour.show(iBack);
+				}, 0);
+			} else {
+				// Next into another app, or a tour started elsewhere (editor preview): open that app
+				oRun.pause(iIndex, oRun.navigateOnPause || (oRun.lastShown < 0 && !oRun.resumed));
+			}
+			return false;
+		}
+		function never() {
+			return new Promise(function () {}); // this step is not shown now
+		}
+
+		oOptions.beforeShowPromise = function () {
+			if (!checkApp()) {
+				return never();
+			}
+			oRun.stepStarts(iIndex);
+			if (!vTarget) {
+				return Promise.resolve();
+			}
+			var iWait = oStep.waitFor;
+			if (oRun.resumed) {
+				iWait = Math.max(iWait === undefined ? 5000 : iWait, RESUME_WAIT_MS);
+			}
+			oRun.waiting = true;
+			return TargetResolver.waitFor(vTarget, iWait).then(function (oDom) {
+				oRun.waiting = false;
+				// the user may have moved on to another app in the meantime
+				if (!oTour.isActive() || oRun.pausing || oTour.getCurrentStep() !== oTour.getById(sStepId)
+					|| !checkApp()) {
+					return never();
+				}
+				oFound = oDom;
+				if (oProxy) {
+					oProxy.destroy();
+					oProxy = null;
+				}
+			});
+		};
+
+		// when resuming, the steps the user has already seen are skipped (once)
+		oOptions.showOn = function () {
+			if (iIndex < oRun.skipBefore) {
+				return false;
+			}
+			if (iIndex === oRun.skipBefore) {
+				oRun.skipBefore = 0;
+			}
+			return !(vTarget && oStep.skipIfMissing && !TargetResolver.resolve(vTarget));
+		};
+
 		if (vTarget) {
 			oOptions.attachTo = {
 				element: function () {
@@ -300,20 +492,6 @@ sap.ui.define([
 				},
 				on: oStep.position || "bottom"
 			};
-			oOptions.beforeShowPromise = function () {
-				return TargetResolver.waitFor(vTarget, oStep.waitFor).then(function (oDom) {
-					oFound = oDom;
-					if (oProxy) {
-						oProxy.destroy();
-						oProxy = null;
-					}
-				});
-			};
-			if (oStep.skipIfMissing) {
-				oOptions.showOn = function () {
-					return !!TargetResolver.resolve(vTarget);
-				};
-			}
 		}
 
 		return oOptions;

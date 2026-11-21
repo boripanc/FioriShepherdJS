@@ -45,7 +45,8 @@
         "toursUrl": "",
         "autoStart": true,
         "showHeaderButton": true,
-        "hideButtonWithoutTours": true
+        "hideButtonWithoutTours": true,
+        "resumeMinutes": 30
       }
     }
   },

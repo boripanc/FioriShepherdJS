@@ -7,7 +7,8 @@
  *   3. shows a "Guided Tour" button in the shell header when tours exist for that app,
  *   4. auto-starts a tour the first time a user opens the app (optional),
  *   5. lets apps start tours themselves through the UI5 EventBus,
- *   6. offers a point-and-click tour editor to authors (lib/editor, loaded on demand).
+ *   6. offers a point-and-click tour editor to authors (lib/editor, loaded on demand),
+ *   7. keeps a tour going when it moves on to another app or the page is reloaded (TourSession).
  */
 sap.ui.define([
 	"sap/ui/core/Component",
@@ -17,8 +18,10 @@ sap.ui.define([
 	"./lib/AppContext",
 	"./lib/SeenStore",
 	"./lib/Text",
-	"./lib/DraftStore"
-], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore) {
+	"./lib/DraftStore",
+	"./lib/TourSession",
+	"./lib/AppMatch"
+], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourSession, AppMatch) {
 	"use strict";
 
 	var LOG_COMPONENT = "fiori.shepherd.guide";
@@ -198,7 +201,7 @@ sap.ui.define([
 			if (!this._fnShowButton) {
 				return;
 			}
-			if (this._aCurrentTours.length > 0 || !this._oConfig.hideButtonWithoutTours) {
+			if (this._aCurrentTours.length > 0 || this._getPausedTour() || !this._oConfig.hideButtonWithoutTours) {
 				this._fnShowButton();
 			} else {
 				this._fnHideButton();
@@ -207,6 +210,11 @@ sap.ui.define([
 
 		_onHeaderButtonPress: function (oEvent) {
 			var aTours = this._aCurrentTours;
+			var oPaused = this._getPausedTour();
+			if (oPaused) {
+				this._openTourChooser(oEvent.getSource(), aTours, oPaused);
+				return;
+			}
 			if (aTours.length === 0) {
 				sap.ui.require(["sap/m/MessageToast"], function (MessageToast) {
 					MessageToast.show(this._oBundle.getText("noTours"));
@@ -220,25 +228,48 @@ sap.ui.define([
 			this._openTourChooser(oEvent.getSource(), aTours);
 		},
 
-		_openTourChooser: function (oSource, aTours) {
+		_openTourChooser: function (oSource, aTours, oPaused) {
 			var that = this;
 			sap.ui.require(["sap/m/ActionSheet", "sap/m/Button"], function (ActionSheet, Button) {
 				if (that._oActionSheet) {
 					that._oActionSheet.destroy();
 				}
+				var aButtons = aTours.map(function (oTour) {
+					return new Button({
+						text: Text.resolve(oTour.title) || oTour.id,
+						icon: oTour.icon || "sap-icon://learning-assistant",
+						press: function () {
+							that.startTour(oTour);
+						}
+					});
+				});
+				if (oPaused) {
+					aButtons.unshift(new Button("fioriShepherdGuideContinue", {
+						text: that._oBundle.getText("continueTour", [
+							Text.resolve(oPaused.def.title) || oPaused.def.id,
+							oPaused.index + 1,
+							oPaused.def.steps.length
+						]),
+						icon: "sap-icon://media-play",
+						type: "Emphasized",
+						press: function () {
+							that.continueTour();
+						}
+					}));
+					aButtons.push(new Button("fioriShepherdGuideEndPaused", {
+						text: that._oBundle.getText("endPausedTour"),
+						icon: "sap-icon://decline",
+						press: function () {
+							TourSession.clear();
+							that._updateButtonVisibility();
+						}
+					}));
+				}
 				that._oActionSheet = new ActionSheet({
 					title: that._oBundle.getText("chooseTour"),
 					showCancelButton: true,
 					placement: "Bottom",
-					buttons: aTours.map(function (oTour) {
-						return new Button({
-							text: Text.resolve(oTour.title) || oTour.id,
-							icon: oTour.icon || "sap-icon://learning-assistant",
-							press: function () {
-								that.startTour(oTour);
-							}
-						});
-					})
+					buttons: aButtons
 				});
 				that._oActionSheet.openBy(oSource);
 			});
@@ -267,10 +298,8 @@ sap.ui.define([
 			var oContext = AppContext.fromHash(window.location.hash, this._oAppLifeCycle);
 			var oPrevious = this._oContext;
 
-			// leaving the app ends its tour (in-app navigation keeps it running)
-			if (oPrevious && oPrevious.intent !== oContext.intent) {
-				this._oRunner.cancel();
-			}
+			// a step that belongs to another app pauses the tour (in-app navigation keeps it running)
+			this._oRunner.notifyContext(oContext);
 			if (this._oEditor && this._oEditor.isOpen() && (!oPrevious || oPrevious.intent !== oContext.intent)) {
 				this._oContext = oContext;
 				this._oEditor.refreshContext();
@@ -283,13 +312,71 @@ sap.ui.define([
 				that._oContext = oContext;
 				that._aCurrentTours = aTours;
 				that._oHeaderItemReady.then(that._updateButtonVisibility.bind(that));
-				that._maybeAutoStart(aTours);
+				// a tour the user is in the middle of goes first; never auto-start another one then
+				if (!that._maybeResume(oContext) && !that._getPausedTour()) {
+					that._maybeAutoStart(aTours);
+				}
+			});
+		},
+
+		/** Where the user is right now (the hash changes before the app is loaded). */
+		_currentContext: function () {
+			return AppContext.fromHash(window.location.hash, this._oAppLifeCycle);
+		},
+
+		/** The tour the user is in the middle of (paused or running), or null. */
+		_getPausedTour: function () {
+			if (this._oRunner.isBusy()) {
+				return null;
+			}
+			return TourSession.load(this._oConfig.resumeMinutes);
+		},
+
+		/**
+		 * Goes on with a tour that was paused (other app) or interrupted (page reload) when the
+		 * user is now in the app of its next step.
+		 * @returns {boolean} true when the tour goes on
+		 */
+		_maybeResume: function (oContext) {
+			var oState = this._getPausedTour();
+			if (!oState) {
+				return false;
+			}
+			var iIndex = TourRunner.resumeIndex(oState.def, oState.index, oContext);
+			if (iIndex < 0) {
+				return false;
+			}
+			this._runTour(oState.def, { startAt: iIndex, resumed: true, preview: oState.preview });
+			return true;
+		},
+
+		/**
+		 * Goes on with the paused tour: right here when it belongs to this app, otherwise opens
+		 * the app of its next step (when the tour says which one).
+		 */
+		continueTour: function () {
+			var that = this;
+			var oState = this._getPausedTour();
+			if (!oState) {
+				return;
+			}
+			if (this._maybeResume(this._currentContext())) {
+				return;
+			}
+			var oApp = TourRunner.stepApps(oState.def)[oState.index];
+			var sHash = AppMatch.hashOf(oApp);
+			if (sHash) {
+				window.location.hash = sHash; // the tour goes on once the app is open
+				return;
+			}
+			sap.ui.require(["sap/m/MessageToast"], function (MessageToast) {
+				MessageToast.show(that._oBundle.getText("openAppToContinue", [AppMatch.labelOf(oApp)]));
 			});
 		},
 
 		_maybeAutoStart: function (aTours) {
 			// never interrupt a running tour or an author who is editing
-			if (this._oRunner.isActive() || (this._oEditor && this._oEditor.isOpen())) {
+			if (this._oRunner.isBusy() || (this._oEditor && this._oEditor.isOpen())) {
 				return;
 			}
 			var oGlobalAutoStart = this._oConfig.autoStart;
@@ -375,7 +462,7 @@ sap.ui.define([
 					});
 				},
 				previewTour: function (oDef) {
-					return that._oRunner.start(oDef);
+					return that._runTour(oDef, { preview: true });
 				},
 				onDraftsChanged: function () {
 					that._refreshContext();
@@ -423,13 +510,48 @@ sap.ui.define([
 				}
 				return that._oRegistry.loadTour(oEntry);
 			}).then(function (oTour) {
-				return that._oRunner.start(oTour, {
-					onFinish: function () {
-						SeenStore.markSeen(oTour);
-					}
-				});
+				return that._runTour(oTour, {});
 			}).catch(function (oError) {
 				Log.error("Could not start guided tour", oError, LOG_COMPONENT);
+			});
+		},
+
+		/**
+		 * Runs a tour and keeps track of its progress, so it can go on in another app or after
+		 * a reload.
+		 * @param {object} oDef full tour (with steps)
+		 * @param {{startAt: number, resumed: boolean, preview: boolean}} mOptions preview: an
+		 *        editor preview, which does not count as "seen"
+		 */
+		_runTour: function (oDef, mOptions) {
+			var that = this;
+			var bPreview = !!mOptions.preview;
+			// keep only what is needed to go on later (catalog entries may carry more)
+			var oSaved = Object.assign({}, oDef);
+			delete oSaved.isDraft;
+			var fnSave = function (iIndex) {
+				TourSession.save({ def: oSaved, index: iIndex, preview: bPreview });
+			};
+			return this._oRunner.start(oDef, {
+				startAt: mOptions.startAt,
+				resumed: mOptions.resumed,
+				getContext: this._currentContext.bind(this),
+				onStep: fnSave,
+				onPause: function (iIndex, oApp, bNavigate) {
+					fnSave(iIndex);
+					var sHash = bNavigate ? AppMatch.hashOf(oApp) : "";
+					if (sHash) {
+						window.location.hash = sHash; // "Next" into another app opens that app
+					}
+					setTimeout(that._updateButtonVisibility.bind(that), 0);
+				},
+				onFinish: function () {
+					TourSession.clear();
+					if (!bPreview) {
+						SeenStore.markSeen(oDef);
+					}
+					that._updateButtonVisibility();
+				}
 			});
 		},
 
