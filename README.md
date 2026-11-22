@@ -101,6 +101,10 @@ Steps can ask the user to type something specific, such as a transaction code, a
 **In the editor:** press **Add T-code step** (with the SAP GUI screen open it picks the command field by itself) and
 enter the code, or, for any picked field, set *Continue when* to *The user types a value (and presses Enter)*.
 
+The tour moves on as soon as the transaction screen opens, also when SAP GUI handles the Enter key itself or
+loads a new page for the transaction. In that case a wrong code can't be blocked before SAP GUI sees it; the step
+simply stays until the right transaction opens.
+
 **Limits:** this works when SAP GUI for HTML (or the other embedded page) comes from the same server as the
 Launchpad, which is the normal setup on an ABAP front-end server. Browsers do not let a page look into embedded pages
 from a different server, and the desktop SAP GUI (SAP Logon) is outside the browser, so neither can be guided.
@@ -289,6 +293,7 @@ scripts/smoke-test.mjs      Playwright end-to-end test of tours
 scripts/editor-test.mjs     Playwright end-to-end test of the editor
 scripts/journey-test.mjs    Playwright test of a tour across apps, reload and pause/continue
 scripts/editor-journey-test.mjs  Playwright test of recording a tour across apps in the editor
+scripts/gui-strict-test.mjs Playwright test of a T-code step against a stricter SAP GUI mock
 ```
 
 ## ShepherdJS version and license

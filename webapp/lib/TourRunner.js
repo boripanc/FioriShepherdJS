@@ -330,16 +330,24 @@ sap.ui.define([
 				oState.textContent = bRight ? "✓" : bShowError ? oBundle.getText("typeWrong", [sShown]) : "";
 			}
 			var bDone = false;
+			var bWasRight = false; // the right value was in the field (the app may empty it later)
 			listen(oInput, "input", function () {
 				refresh(false);
+				if (String(InputCheck.valueOf(oInput) || "").trim()) {
+					bWasRight = isRight();
+				}
 				if (sAdvanceEvent === "input" && isRight() && !bDone) {
 					bDone = true;
 					setTimeout(goOn, 400);
 				}
 			});
 			if (sAdvanceEvent === "enter") {
-				listen(oInput, "keydown", function (oEvent) {
-					if (oEvent.key !== "Enter" || bDone) {
+				// Listen on the window (capture) so this runs before the app's own key handling:
+				// SAP GUI for HTML handles Enter itself and may stop the event before it reaches
+				// the field.
+				var oWin = oInput.ownerDocument.defaultView || window;
+				listen(oWin, "keydown", function (oEvent) {
+					if (oEvent.key !== "Enter" || bDone || !(oEvent.target === oInput || oInput.contains(oEvent.target))) {
 						return;
 					}
 					if (isRight()) {
@@ -356,6 +364,43 @@ sap.ui.define([
 						void oBox.offsetWidth; // restart the animation
 						oBox.classList.add("fioriGuideShake");
 					}
+				});
+
+				// Safety net when the Enter key is not seen (e.g. the app starts the transaction from
+				// a button, or reloads its page): the right value was in the field and then the
+				// screen changed (field gone, page replaced, or title / fields changed).
+				var fnScreen = function () {
+					try {
+						var oDoc = oInput.ownerDocument;
+						return oInput.isConnected && oDoc.defaultView
+							? oDoc.title + "|" + oDoc.querySelectorAll("input, textarea").length : "";
+					} catch (e) {
+						return ""; // the page is gone
+					}
+				};
+				var sScreen = fnScreen();
+				var iWatch = setInterval(function () {
+					if (bDone) {
+						return;
+					}
+					var sNow = fnScreen();
+					if (sNow && sNow === sScreen) {
+						// the GUI empties the field when it runs the transaction: keep what we saw
+						var sValue = String(InputCheck.valueOf(oInput) || "").trim();
+						if (sValue) {
+							bWasRight = isRight();
+						}
+						return;
+					}
+					if (bWasRight) {
+						bDone = true;
+						goOn();
+					} else {
+						sScreen = sNow; // a different screen, but not because of the value we asked for
+					}
+				}, 250);
+				aCleanup.push(function () {
+					clearInterval(iWatch);
 				});
 			}
 			refresh(false);
