@@ -19,7 +19,8 @@ await build({
   banner: { js: `/*! shepherd.js v${version} | ${license} | https://github.com/shepherd-pro/shepherd */` },
   target: ["es2019"],
   outfile: `${outDir}/shepherd.js`,
-  legalComments: "inline"
+  legalComments: "inline",
+  charset: "ascii" // SAP servers may serve files in a non-UTF-8 code page (e.g. Thai)
 });
 copyFileSync(path.join(pkgDir, "dist/css/shepherd.css"), `${outDir}/shepherd.css`);
 console.log(`Bundled shepherd.js v${version} (${license}) into ${outDir}`);

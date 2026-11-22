@@ -8,7 +8,7 @@
     "build:shepherd": "node scripts/bundle-shepherd.mjs",
     "start": "ui5 serve --open test/flpSandbox.html",
     "serve": "ui5 serve",
-    "build": "npm run build:shepherd && ui5 build --clean-dest",
+    "build": "npm run build:shepherd && ui5 build --clean-dest && node scripts/ascii-dist.mjs",
     "test": "node scripts/smoke-test.mjs && node scripts/editor-test.mjs && node scripts/journey-test.mjs && node scripts/editor-journey-test.mjs && node scripts/gui-strict-test.mjs"
   },
   "devDependencies": {

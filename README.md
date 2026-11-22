@@ -254,6 +254,8 @@ sap.ui.getCore().getEventBus().publish("fiori.shepherd.guide", "reset", { tourId
 2. Deploy `dist/` as a BSP application, e.g. `ZFIORI_GUIDE`, with the SAP Fiori tools deploy command
    (`npx fiori deploy`, after `npm i -D @sap/ux-ui5-tooling` and a `ui5-deploy.yaml`) or report `/UI5/UI5_REPOSITORY_LOAD`.
    Then run `/UI5/APP_INDEX_CALCULATE` for the BSP.
+   The build writes every file in plain ASCII (non-ASCII characters escaped), so it works even when the server
+   serves the files in a non-UTF-8 code page such as Thai. Always deploy the output of `npm run build`.
 3. In the Launchpad Designer / app manager, create a technical catalog entry (or use a custom catalog) with a
    **target mapping**: semantic object `Shell`, action `plugin`, application type *SAPUI5 Fiori App*,
    URL `/sap/bc/ui5_ui5/sap/zfiori_guide`, ID `fiori.shepherd.guide`. Add plugin parameters (table above) as target mapping parameters if needed.

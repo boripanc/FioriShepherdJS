@@ -291,11 +291,11 @@ sap.ui.define([
 			return sName ? this.t("editor.frameFieldLabel", [sName]) : String(oTarget.selector || "").replace(/\\/g, "");
 		}
 		if (oTarget.controlId) {
-			return "“" + oTarget.controlId + "”";
+			return "\u201c" + oTarget.controlId + "\u201d";
 		}
 		if (oTarget.controlType) {
 			var aProps = Object.keys(oTarget.properties || {});
-			return oTarget.controlType.split(".").pop() + (aProps.length ? " “" + oTarget.properties[aProps[0]] + "”" : "");
+			return oTarget.controlType.split(".").pop() + (aProps.length ? " \u201c" + oTarget.properties[aProps[0]] + "\u201d" : "");
 		}
 		return oTarget.selector || "";
 	};
