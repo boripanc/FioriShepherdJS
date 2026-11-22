@@ -45,22 +45,40 @@
 		document.getElementById("wnd[0]/sbar").textContent = "";
 		document.title = name === "home" ? "SAP Easy Access" : "Create Sales Documents";
 	}
+	// ?strict=1 behaves more like the real SAP GUI for HTML: it handles Enter itself before the
+	// field sees it (window capture, stopImmediatePropagation) and loads a new page per transaction.
+	var strict = /[?&]strict=1/.test(location.search);
 	function run() {
 		var field = document.getElementById("ToolbarOkCode");
 		var code = field.value.trim().toUpperCase().replace(/^\/[NO]/, "");
 		field.value = "";
 		if (screens[code]) {
-			show(code);
+			if (strict) {
+				setTimeout(function () { location.replace("?strict=1&screen=" + code); }, 150);
+			} else {
+				show(code);
+			}
 		} else if (code) {
 			document.getElementById("wnd[0]/sbar").textContent = "Transaction " + code + " does not exist";
 		}
 	}
-	document.getElementById("ToolbarOkCode").addEventListener("keydown", function (e) {
-		if (e.key === "Enter") { run(); }
-	});
+	if (strict) {
+		window.addEventListener("keydown", function (e) {
+			if (e.key === "Enter" && e.target.id === "ToolbarOkCode") {
+				e.preventDefault();
+				e.stopImmediatePropagation();
+				run();
+			}
+		}, true);
+	} else {
+		document.getElementById("ToolbarOkCode").addEventListener("keydown", function (e) {
+			if (e.key === "Enter") { run(); }
+		});
+	}
 	document.getElementById("M0:36::btn[0]").addEventListener("click", run);
 	document.getElementById("M0:36::btn[3]").addEventListener("click", function () { show("home"); });
-	show("home");
+	var start = /[?&]screen=(\w+)/.exec(location.search);
+	show(start && screens[start[1]] ? start[1] : "home");
 </script>
 </body>
 </html>
