@@ -327,7 +327,7 @@ sap.ui.define([
 				var bRight = isRight();
 				oBox.classList.toggle("fioriGuideExpectOk", bRight);
 				oBox.classList.toggle("fioriGuideExpectError", !bRight && !!bShowError);
-				oState.textContent = bRight ? "✓" : bShowError ? oBundle.getText("typeWrong", [sShown]) : "";
+				oState.textContent = bRight ? "\u2713" : bShowError ? oBundle.getText("typeWrong", [sShown]) : "";
 			}
 			var bDone = false;
 			var bWasRight = false; // the right value was in the field (the app may empty it later)

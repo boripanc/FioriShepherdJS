@@ -2,8 +2,8 @@
 	"steps": [
 		{
 			"id": "intro",
-			"title": { "en": "Manage Sales Orders", "de": "Kundenaufträge verwalten" },
-			"text": { "en": "<p>This short tour shows you how to find an order and create a new one.</p><p>You can restart it at any time with the <b>Guided Tour</b> button in the header.</p>", "de": "<p>Diese kurze Tour zeigt, wie Sie Aufträge finden und neue anlegen.</p>" }
+			"title": { "en": "Manage Sales Orders", "de": "Kundenauftr\u00e4ge verwalten" },
+			"text": { "en": "<p>This short tour shows you how to find an order and create a new one.</p><p>You can restart it at any time with the <b>Guided Tour</b> button in the header.</p>", "de": "<p>Diese kurze Tour zeigt, wie Sie Auftr\u00e4ge finden und neue anlegen.</p>" }
 		},
 		{
 			"id": "search",

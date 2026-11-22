@@ -32,7 +32,7 @@
 			"id": "salesorder-overview",
 			"title": {
 				"en": "Find and create sales orders",
-				"de": "Kundenaufträge suchen und anlegen"
+				"de": "Kundenauftr\u00e4ge suchen und anlegen"
 			},
 			"intent": "SalesOrder-manage",
 			"innerHash": "^$|^orders",

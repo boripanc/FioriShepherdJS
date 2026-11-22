@@ -150,7 +150,7 @@ sap.ui.define(["./SelectorBuilder", "../TargetResolver", "../FrameProxy"], funct
 		this._oHighlight.setAttribute("data-quality", oResult.quality);
 
 		this._oTip.style.display = "block";
-		this._oTip.textContent = oResult.label + " · " + this._fnLabel(oResult.quality);
+		this._oTip.textContent = oResult.label + " \u00b7 " + this._fnLabel(oResult.quality);
 		this._oTip.style.left = Math.max(4, oRect.left) + "px";
 		this._oTip.style.top = (oRect.top > 30 ? oRect.top - 28 : oRect.bottom + 6) + "px";
 	};
