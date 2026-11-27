@@ -64,10 +64,16 @@ sap.ui.define([
 		return sPrefix ? "^" + escapeRegex(sPrefix) : "^$";
 	}
 
-	/** How the user moves on from a step: next | click | auto (the guide clicks) | typeEnter | type */
+	/**
+	 * How the user moves on from a step: next | click | auto (the guide clicks) |
+	 * autoEnter (the guide types and presses Enter) | typeEnter | type
+	 */
 	function advanceOf(oStep) {
 		if (oStep.autoClick === true) {
 			return "auto";
+		}
+		if (oStep.pressEnter === true && oStep.fillValue !== undefined && oStep.fillValue !== null && oStep.fillValue !== "") {
+			return "autoEnter";
 		}
 		if (oStep.tcode || (oStep.expectValue !== undefined && oStep.expectValue !== "")) {
 			return oStep.advanceOn === "input" ? "type" : "typeEnter";
@@ -429,11 +435,22 @@ sap.ui.define([
 					width: "100%",
 					visible: "{= ${quality} !== 'none' }",
 					selectedKey: "{advance}",
-					change: this._markDirty.bind(this),
+					change: function (oEvent) {
+						// "the guide types" on a step that asked the user to type: start from that value
+						var oCtx = oEvent.getSource().getBindingContext();
+						if (oCtx && oEvent.getParameter("selectedItem").getKey() === "autoEnter" && !oCtx.getProperty("fillValue")) {
+							var sExpected = String(oCtx.getProperty("expectValue") || "").split(",")[0].trim();
+							if (sExpected && !/^\/.*\/[a-z]*$/.test(sExpected)) {
+								oCtx.getModel().setProperty("fillValue", sExpected, oCtx);
+							}
+						}
+						that._markDirty();
+					},
 					items: [
 						new Item({ key: "next", text: this.t("editor.advance.next") }),
 						new Item({ key: "click", text: this.t("editor.advance.click") }),
 						new Item({ key: "auto", text: this.t("editor.advance.auto") }),
+						new Item({ key: "autoEnter", text: this.t("editor.advance.autoEnter") }),
 						new Item({ key: "typeEnter", text: this.t("editor.advance.typeEnter") }),
 						new Item({ key: "type", text: this.t("editor.advance.type") })
 					]
@@ -449,7 +466,9 @@ sap.ui.define([
 				new CheckBox({ wrapping: true, text: this.t("editor.tcode"), selected: "{tcode}",
 					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
 					select: this._markDirty.bind(this) }),
-				new Label({ text: this.t("editor.fillValue"), visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }" }),
+				new Label({ text: this.t("editor.fillValue"),
+					visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' && ${advance} !== 'autoEnter' }" }),
+				new Label({ text: this.t("editor.typeValue"), required: true, visible: "{= ${quality} !== 'none' && ${advance} === 'autoEnter' }" }),
 				new Input("fioriGuideEditorFillValue", {
 					value: "{fillValue}",
 					valueLiveUpdate: true,
@@ -797,6 +816,8 @@ sap.ui.define([
 					oOut.advanceOn = "click";
 				} else if (oStep.advance === "auto") {
 					oOut.autoClick = true;
+				} else if (oStep.advance === "autoEnter") {
+					oOut.pressEnter = true; // with fillValue below: the guide types it and presses Enter
 				} else if ((oStep.advance === "typeEnter" || oStep.advance === "type") && String(oStep.expectValue || "").trim()) {
 					var aValues = String(oStep.expectValue).split(",").map(function (sValue) {
 						return sValue.trim();
@@ -813,9 +834,11 @@ sap.ui.define([
 					if (oStep.pressEnter && oStep.advance !== "auto") {
 						oOut.pressEnter = true;
 					}
+				} else {
+					delete oOut.pressEnter; // nothing to type: no Enter either
 				}
 			}
-			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue", "actionDelay"].forEach(function (sKey) {
+			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue", "actionDelay", "typeSpeed"].forEach(function (sKey) {
 				if (oStep[sKey] !== undefined && oStep[sKey] !== null) {
 					oOut[sKey] = oStep[sKey];
 				}
@@ -847,6 +870,14 @@ sap.ui.define([
 		if (iMissing >= 0) {
 			this._showStep(iMissing);
 			MessageToast.show(this.t("editor.needExpectValue", [iMissing + 1]));
+			return false;
+		}
+		var iNoValue = (oTour.steps || []).findIndex(function (oStep) {
+			return oStep.advance === "autoEnter" && oStep.quality !== "none" && String(oStep.fillValue || "") === "";
+		});
+		if (iNoValue >= 0) {
+			this._showStep(iNoValue);
+			MessageToast.show(this.t("editor.needTypeValue", [iNoValue + 1]));
 			return false;
 		}
 		return true;
