@@ -84,6 +84,21 @@ try {
 	check(/Button.*Create/.test(label2), `Element without own id falls back to type + text (${label2})`);
 	await page.fill("#fioriGuideEditorStepTitleInput-inner", "Create a new order");
 	await page.fill("#fioriGuideEditorStepTextInput-inner", "When you need a new order, start here.");
+	// "the guide clicks it for the user" with a value to fill in, saved as autoClick / fillValue
+	await page.click("#fioriGuideEditorAdvance");
+	await page.click(".sapMSelectList li:has-text('The guide clicks the element for the user')");
+	await page.fill("#fioriGuideEditorFillValue-inner", "Sample");
+	check(!(await page.locator("#fioriGuideEditorPressEnter").isVisible()), "Press Enter is not offered when the guide clicks anyway");
+	await page.click("#fioriGuideEditorSave");
+	await page.waitForTimeout(1200);
+	const autoDraft = Object.values(await page.evaluate(() => JSON.parse(localStorage.getItem("fiori.shepherd.guide.drafts") || "{}")))[0];
+	check(autoDraft && autoDraft.steps[1].autoClick === true && autoDraft.steps[1].fillValue === "Sample" && !autoDraft.steps[1].advanceOn,
+		"A step the guide clicks is saved with autoClick and fillValue");
+	// saving reloads the tour: open step 2 again, the fill value comes back from the draft
+	await page.locator("#fioriGuideEditor .fioriGuideEditorStepTarget").nth(1).click();
+	await page.waitForTimeout(300);
+	check(await page.inputValue("#fioriGuideEditorFillValue-inner") === "Sample", "The fill value is loaded back into the editor");
+	await page.fill("#fioriGuideEditorFillValue-inner", "");
 	await page.click("#fioriGuideEditorAdvance");
 	await page.click(".sapMSelectList li:has-text('The user clicks the element')");
 	await shot("3-step-details");
@@ -97,6 +112,7 @@ try {
 	check(draft && draft.intent === "SalesOrder-manage", "Draft is attached to the current app");
 	check(draft && draft.steps[0].target.controlId === "statusFilter", "Step 1 target is {controlId: statusFilter}");
 	check(draft && draft.steps[1].target.controlType === "sap.m.Button" && draft.steps[1].advanceOn === "click", "Step 2 target is Button 'Create' and waits for a click");
+	check(draft && !draft.steps[1].autoClick && draft.steps[1].fillValue === undefined, "Switching back to a user click drops autoClick and the empty fill value");
 	await shot("4-saved");
 
 	// preview

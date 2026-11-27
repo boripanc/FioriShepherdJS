@@ -111,6 +111,31 @@ from a different server, and the desktop SAP GUI (SAP Logon) is outside the brow
 The command field is found by its id `ToolbarOkCode` (and older variants); this was tested against a mock SAP GUI page,
 so please try it on your system's SAP GUI for HTML first.
 
+## Steps the guide does for the user
+
+A step can fill in a field or click an element itself, so users see a sample value or the tour moves along a
+demo without them doing every click:
+
+```json
+{ "target": { "controlId": "searchField" }, "fillValue": "Domestic", "pressEnter": true },
+{ "target": { "controlType": "sap.m.Button", "text": "Create" }, "autoClick": true },
+{ "target": { "controlId": "newCustomer" }, "fillValue": "ACME Corp" }
+```
+
+- `fillValue` types the value into the highlighted field. The step stays open with its Next button, so the user can
+  check or change the value.
+- `pressEnter: true` (with `fillValue`) also presses Enter in the field, and the tour goes on by itself.
+- `autoClick: true` clicks the highlighted element (after filling it, if `fillValue` is set) and the tour goes on by itself.
+- The step is shown for 1.5 seconds first so the user sees what happens; change that with `actionDelay` (milliseconds).
+
+For UI5 apps the value is set through the control, so the app's data binding and change handlers see it as if the
+user typed it. SAP GUI for HTML fields get the browser events typing and clicking cause; this was tested against the
+mock SAP GUI page, so try it on your system first. Be careful with `autoClick` on buttons that save or post
+something: the guide really presses them.
+
+**In the editor:** set *Continue when* to *The guide clicks the element for the user*, and/or enter a value in
+*Value the guide fills in for the user*. *Then press Enter for the user* appears once a value is entered.
+
 ## Tours across apps
 
 A tour keeps going when the user moves from one screen or app to the next:
@@ -203,6 +228,10 @@ A steps file:
 | `skipIfMissing` | `true` skips the step when its target is not on screen. |
 | `advanceOn` | `"click"` (or another DOM event): go to the next step when the user does this on the target. The Next button is hidden unless `showNext: true`. With `expectValue`: `"enter"` (default) or `"input"`. |
 | `expectValue` | The user must type this into the target field, e.g. `"VA01"`. See [transaction codes](#guiding-users-to-type-a-transaction-code). |
+| `fillValue` | The guide types this into the target field for the user. See [steps the guide does](#steps-the-guide-does-for-the-user). |
+| `pressEnter` | With `fillValue`: also press Enter in the field, then go on by itself. |
+| `autoClick` | `true`: the guide clicks the target for the user, then goes on by itself. |
+| `actionDelay` | Milliseconds the step is shown before the guide fills / clicks (default 1500). |
 | `tcode` | `"VA01"`: transaction code step in SAP GUI for HTML (command field, ignores `/n` `/o`, continues on Enter). |
 | `canClickTarget` | `false` blocks clicks on the highlighted element. |
 | `classes` | Extra CSS classes for the popup. |

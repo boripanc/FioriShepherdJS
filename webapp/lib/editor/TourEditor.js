@@ -64,8 +64,11 @@ sap.ui.define([
 		return sPrefix ? "^" + escapeRegex(sPrefix) : "^$";
 	}
 
-	/** How the user moves on from a step: next | click | typeEnter | type */
+	/** How the user moves on from a step: next | click | auto (the guide clicks) | typeEnter | type */
 	function advanceOf(oStep) {
+		if (oStep.autoClick === true) {
+			return "auto";
+		}
 		if (oStep.tcode || (oStep.expectValue !== undefined && oStep.expectValue !== "")) {
 			return oStep.advanceOn === "input" ? "type" : "typeEnter";
 		}
@@ -262,6 +265,9 @@ sap.ui.define([
 						expectValue: oStep.tcode && typeof oStep.tcode === "string" ? oStep.tcode
 							: Array.isArray(oStep.expectValue) ? oStep.expectValue.join(", ") : oStep.expectValue || "",
 						tcode: !!oStep.tcode,
+						fillValue: oStep.fillValue === undefined || oStep.fillValue === null ? "" : Text.resolve(oStep.fillValue),
+						fillValueI18n: typeof oStep.fillValue === "object" ? oStep.fillValue : null,
+						pressEnter: oStep.pressEnter === true,
 						targetLabel: oStep.target ? that._describeTarget(oStep.target) : that.t("editor.noTarget"),
 						quality: oStep.target ? (oFound ? "found" : "missing") : "none"
 					});
@@ -427,6 +433,7 @@ sap.ui.define([
 					items: [
 						new Item({ key: "next", text: this.t("editor.advance.next") }),
 						new Item({ key: "click", text: this.t("editor.advance.click") }),
+						new Item({ key: "auto", text: this.t("editor.advance.auto") }),
 						new Item({ key: "typeEnter", text: this.t("editor.advance.typeEnter") }),
 						new Item({ key: "type", text: this.t("editor.advance.type") })
 					]
@@ -441,6 +448,17 @@ sap.ui.define([
 				}),
 				new CheckBox({ wrapping: true, text: this.t("editor.tcode"), selected: "{tcode}",
 					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
+					select: this._markDirty.bind(this) }),
+				new Label({ text: this.t("editor.fillValue"), visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }" }),
+				new Input("fioriGuideEditorFillValue", {
+					value: "{fillValue}",
+					valueLiveUpdate: true,
+					placeholder: this.t("editor.fillValuePlaceholder"),
+					visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }",
+					liveChange: this._markDirty.bind(this)
+				}),
+				new CheckBox("fioriGuideEditorPressEnter", { wrapping: true, text: this.t("editor.pressEnter"), selected: "{pressEnter}",
+					visible: "{= ${quality} !== 'none' && (${advance} === 'next' || ${advance} === 'click') && !!${fillValue} }",
 					select: this._markDirty.bind(this) })
 			]
 		}).addStyleClass("fioriGuideEditorStepForm");
@@ -588,7 +606,7 @@ sap.ui.define([
 			if (!oPick) {
 				return;
 			}
-			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false }, that._fromPick(oPick)));
+			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false }, that._fromPick(oPick)));
 			that._focusStepTitle();
 			if (oPick.quality === "fragile") {
 				MessageToast.show(that.t("editor.fragileHint"), { duration: 6000 });
@@ -597,7 +615,7 @@ sap.ui.define([
 	};
 
 	TourEditor.prototype._addMessageStep = function () {
-		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
+		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
 		this._focusStepTitle();
 	};
 
@@ -625,7 +643,9 @@ sap.ui.define([
 				position: "bottom-start",
 				advance: "typeEnter",
 				expectValue: "",
-				tcode: true
+				tcode: true,
+				fillValue: "",
+				pressEnter: false
 			}, that._fromPick(oPick)));
 			setTimeout(function () {
 				var oInput = sap.ui.getCore().byId("fioriGuideEditorExpectValue");
@@ -775,6 +795,8 @@ sap.ui.define([
 				oOut.position = oStep.position || "bottom";
 				if (oStep.advance === "click") {
 					oOut.advanceOn = "click";
+				} else if (oStep.advance === "auto") {
+					oOut.autoClick = true;
 				} else if ((oStep.advance === "typeEnter" || oStep.advance === "type") && String(oStep.expectValue || "").trim()) {
 					var aValues = String(oStep.expectValue).split(",").map(function (sValue) {
 						return sValue.trim();
@@ -785,8 +807,15 @@ sap.ui.define([
 						oOut.tcode = true;
 					}
 				}
+				// a value the guide types in for the user (not on "the user types" steps)
+				if (oStep.advance !== "typeEnter" && oStep.advance !== "type" && String(oStep.fillValue || "") !== "") {
+					oOut.fillValue = i18nValue(oStep.fillValueI18n, oStep.fillValue);
+					if (oStep.pressEnter && oStep.advance !== "auto") {
+						oOut.pressEnter = true;
+					}
+				}
 			}
-			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue"].forEach(function (sKey) {
+			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue", "actionDelay"].forEach(function (sKey) {
 				if (oStep[sKey] !== undefined && oStep[sKey] !== null) {
 					oOut[sKey] = oStep[sKey];
 				}
