@@ -199,6 +199,21 @@ try {
 	check(!!va01 && va01.steps[0].tcode === true && va01.steps[0].expectValue === "VA01" && va01.steps[0].target.webgui === "okcode", "T-code step saved as {tcode, expectValue: VA01, target: command field}");
 	check(!!va01 && va01.steps[1].target.frame === true && va01.steps[1].expectValue === "OR" && va01.steps[1].advanceOn === "input", "GUI field step saved with a frame target and expected value");
 	await shot("11-gui-tour-saved");
+
+	// let the guide type the T-code and press Enter instead: the value moves over from "Value the user must type"
+	await page.locator("#fioriGuideEditor .fioriGuideEditorStepTarget").nth(0).click();
+	await page.waitForTimeout(300);
+	await page.click("#fioriGuideEditorAdvance");
+	await page.click(".sapMSelectList li:has-text('The guide types a value and presses Enter')");
+	await page.waitForTimeout(300);
+	check(await page.inputValue("#fioriGuideEditorFillValue-inner") === "VA01", "Switching to 'the guide types' keeps the T-code as the value to type");
+	await page.click("#fioriGuideEditorSave");
+	await page.waitForTimeout(1200);
+	const va01Auto = Object.values(await page.evaluate(() => JSON.parse(localStorage.getItem("fiori.shepherd.guide.drafts") || "{}")))
+		.find((t) => t.title === "Start VA01");
+	const s0 = va01Auto && va01Auto.steps[0];
+	check(!!s0 && s0.fillValue === "VA01" && s0.pressEnter === true && !s0.tcode && s0.expectValue === undefined && s0.target.webgui === "okcode",
+		"A step the guide types is saved as {fillValue: VA01, pressEnter: true} on the command field");
 } catch (e) {
 	failed = true;
 	console.error(e);

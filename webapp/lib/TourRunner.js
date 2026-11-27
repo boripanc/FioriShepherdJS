@@ -18,6 +18,7 @@
  *   fillValue      the tour types this into the target field for the user (UI5 input or SAP GUI field)
  *   pressEnter     after fillValue: the tour also presses Enter in the field and goes on
  *   autoClick      true: the tour clicks the target for the user (after fillValue, if any) and goes on
+ *   typeSpeed      ms per letter while the guide types fillValue (default 60, 0: all at once)
  *   actionDelay    ms the step is shown before the tour fills / clicks, so the user can follow
  *                  (default 1500)
  *   showNext       keep the Next button although advanceOn is set
@@ -440,21 +441,24 @@ sap.ui.define([
 				if (!oTour.isActive() || oTour.getCurrentStep() !== oTour.getById(sStepId)) {
 					return;
 				}
-				if (bFill) {
-					StepAction.fill(oDom, Text.resolve(oStep.fillValue));
-				}
-				if (bFill && oStep.pressEnter === true) {
-					StepAction.pressEnter(oDom);
-				}
-				if (oStep.autoClick === true) {
-					StepAction.click(oDom);
-				}
-				oBox.classList.add("fioriGuideAutoDone");
-				oBox.textContent = oBundle.getText("autoDone");
-				if (bAuto) {
-					// let the app react first (open a dialog, load the next screen)
-					setTimeout(goOn, 400);
-				}
+				var pTyped = bFill ? StepAction.type(oDom, Text.resolve(oStep.fillValue), oStep.typeSpeed) : Promise.resolve();
+				pTyped.then(function () {
+					if (!oTour.isActive() || oTour.getCurrentStep() !== oTour.getById(sStepId)) {
+						return; // the user moved on or closed the tour while the guide was typing
+					}
+					if (bFill && oStep.pressEnter === true) {
+						StepAction.pressEnter(oDom);
+					}
+					if (oStep.autoClick === true) {
+						StepAction.click(oDom);
+					}
+					oBox.classList.add("fioriGuideAutoDone");
+					oBox.textContent = oBundle.getText("autoDone");
+					if (bAuto) {
+						// let the app react first (open a dialog, load the next screen)
+						setTimeout(goOn, 400);
+					}
+				});
 			}, iDelay);
 			aCleanup.push(function () {
 				if (iTimer) {

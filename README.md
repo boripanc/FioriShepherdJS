@@ -127,14 +127,27 @@ demo without them doing every click:
 - `pressEnter: true` (with `fillValue`) also presses Enter in the field, and the tour goes on by itself.
 - `autoClick: true` clicks the highlighted element (after filling it, if `fillValue` is set) and the tour goes on by itself.
 - The step is shown for 1.5 seconds first so the user sees what happens; change that with `actionDelay` (milliseconds).
+- The value appears letter by letter, so users see the guide typing; change the speed with `typeSpeed` (milliseconds per
+  letter, `0` puts it in at once).
+
+A transaction code the guide types and starts for the user:
+
+```json
+{ "target": { "webgui": "okcode" }, "fillValue": "VA01", "pressEnter": true }
+```
 
 For UI5 apps the value is set through the control, so the app's data binding and change handlers see it as if the
 user typed it. SAP GUI for HTML fields get the browser events typing and clicking cause; this was tested against the
 mock SAP GUI page, so try it on your system first. Be careful with `autoClick` on buttons that save or post
 something: the guide really presses them.
 
-**In the editor:** set *Continue when* to *The guide clicks the element for the user*, and/or enter a value in
-*Value the guide fills in for the user*. *Then press Enter for the user* appears once a value is entered.
+**In the editor:** set *Continue when* to
+- *The guide types a value and presses Enter for the user*, and enter the value (on a T-code step the code you already
+  entered is taken over), or
+- *The guide clicks the element for the user*.
+
+For a value the user can still check before going on, keep *The user presses Next* and enter a
+*Value the guide fills in for the user*.
 
 ## Tours across apps
 
@@ -231,6 +244,7 @@ A steps file:
 | `fillValue` | The guide types this into the target field for the user. See [steps the guide does](#steps-the-guide-does-for-the-user). |
 | `pressEnter` | With `fillValue`: also press Enter in the field, then go on by itself. |
 | `autoClick` | `true`: the guide clicks the target for the user, then goes on by itself. |
+| `typeSpeed` | Milliseconds per letter while the guide types `fillValue` (default 60, `0`: all at once). |
 | `actionDelay` | Milliseconds the step is shown before the guide fills / clicks (default 1500). |
 | `tcode` | `"VA01"`: transaction code step in SAP GUI for HTML (command field, ignores `/n` `/o`, continues on Enter). |
 | `canClickTarget` | `false` blocks clicks on the highlighted element. |

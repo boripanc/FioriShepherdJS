@@ -89,6 +89,41 @@ sap.ui.define(["./InputCheck"], function (InputCheck) {
 			return true;
 		},
 
+		/**
+		 * Like fill, but shows the value appearing letter by letter first, so the user sees the
+		 * guide typing. The app is told about the value once, at the end (see fill).
+		 * @returns {Promise<boolean>} false when there is no field to fill
+		 */
+		type: function (oDom, sValue, iCharMs) {
+			var that = this;
+			sValue = sValue === undefined || sValue === null ? "" : String(sValue);
+			var oInput = InputCheck.inputOf(oDom);
+			if (!oInput) {
+				return Promise.resolve(false);
+			}
+			var iMs = typeof iCharMs === "number" ? iCharMs : 60;
+			if (!iMs || sValue.length < 2 || !oInput.isConnected) {
+				return Promise.resolve(that.fill(oDom, sValue));
+			}
+			try {
+				oInput.focus({ preventScroll: true });
+			} catch (e) {
+				// not focusable
+			}
+			return new Promise(function (fnResolve) {
+				var i = 0;
+				(function next() {
+					i++;
+					if (i >= sValue.length || !oInput.isConnected) {
+						fnResolve(that.fill(oDom, sValue));
+						return;
+					}
+					setDomValue(oInput, sValue.slice(0, i));
+					setTimeout(next, iMs);
+				})();
+			});
+		},
+
 		/** Clicks oDom the way a mouse does (pointer, mouse and click events). */
 		click: function (oDom) {
 			if (!oDom || !oDom.isConnected) {
