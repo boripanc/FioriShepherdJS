@@ -293,6 +293,7 @@ sap.ui.define([
 						fillValue: oStep.fillValue === undefined || oStep.fillValue === null ? "" : Text.resolve(oStep.fillValue),
 						fillValueI18n: typeof oStep.fillValue === "object" ? oStep.fillValue : null,
 						pressEnter: oStep.pressEnter === true,
+						followUser: oStep.followUser !== false,
 						targetLabel: oStep.target ? that._describeTarget(oStep.target) : that.t("editor.noTarget"),
 						quality: oStep.target ? (oFound ? "found" : "missing") : "none"
 					});
@@ -484,6 +485,9 @@ sap.ui.define([
 				}),
 				new CheckBox("fioriGuideEditorPressEnter", { wrapping: true, text: this.t("editor.pressEnter"), selected: "{pressEnter}",
 					visible: "{= ${quality} !== 'none' && (${advance} === 'next' || ${advance} === 'click') && !!${fillValue} }",
+					select: this._markDirty.bind(this) }),
+				new CheckBox("fioriGuideEditorFollowUser", { wrapping: true, text: this.t("editor.followUser"), selected: "{followUser}",
+					visible: "{= ${advance} === 'next' && !${fillValue} }",
 					select: this._markDirty.bind(this) })
 			]
 		}).addStyleClass("fioriGuideEditorStepForm");
@@ -655,7 +659,7 @@ sap.ui.define([
 			if (!oPick) {
 				return;
 			}
-			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false }, that._fromPick(oPick)));
+			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, followUser: true }, that._fromPick(oPick)));
 			that._focusStepTitle();
 			if (oPick.quality === "fragile") {
 				MessageToast.show(that.t("editor.fragileHint"), { duration: 6000 });
@@ -664,7 +668,7 @@ sap.ui.define([
 	};
 
 	TourEditor.prototype._addMessageStep = function () {
-		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
+		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, followUser: true, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
 		this._focusStepTitle();
 	};
 
@@ -869,6 +873,10 @@ sap.ui.define([
 						oOut.pressEnter = true;
 					}
 				}
+			}
+			// "follow the user" is on by default for Next steps; only the opt-out is stored
+			if (oStep.followUser === false && (oStep.advance || "next") === "next" && !oOut.fillValue) {
+				oOut.followUser = false;
 			}
 			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue", "actionDelay"].forEach(function (sKey) {
 				if (oStep[sKey] !== undefined && oStep[sKey] !== null) {

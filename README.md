@@ -13,6 +13,8 @@ powered by [ShepherdJS](https://github.com/shepherd-pro/shepherd).
   because Launchpad-generated DOM ids are long and unstable.
 - **Interactive steps.** A step can wait for the user to click the highlighted element (`advanceOn`), wait for a
   dialog to open (`waitFor`) and skip itself when its element isn't on screen (`skipIfMissing`).
+- **Follows the user.** Steps with a Next button also go on when the user does the step directly in the app
+  (clicks the element, enters the value, opens the next screen), see [Following the user](#following-the-user).
 - **Tours across apps and reloads.** A tour can start on the Launchpad home page, go on in an app and end in
   SAP GUI. It pauses when the user is somewhere else and goes on by itself, also after a page reload
   (see [Tours across apps](#tours-across-apps)).
@@ -362,6 +364,28 @@ something: the guide really presses them.
 **In the editor:** set *Continue when* to *The guide clicks the element for the user*, and/or enter a value in
 *Value the guide fills in for the user*. *Then press Enter for the user* appears once a value is entered.
 
+## Following the user
+
+Users often do what a step says right in the app instead of pressing Next in the popup. A step with a Next button
+therefore also goes on by itself when the user:
+
+- clicks the highlighted button, link, tile or list item,
+- enters a value in the highlighted field and presses Enter or Tab or leaves the field, ticks the highlighted
+  checkbox, or picks another entry in the highlighted drop-down (clicking into a field alone does not count),
+- does something else in the app that leads on: after they clicked or typed, the next step's element appears
+  (it was not there when the step opened), or this step's element goes away while the next step's element is on
+  the screen (a new screen, a dialog closed, SAP GUI moved on).
+
+This works in UI5 apps and in SAP GUI for HTML (also when SAP GUI swallows the key or loads a new page per screen).
+Clicks and keys in the guide's own popup do not count, and the Next button stays. When the user moves on to another
+app, the tour already goes on there by itself (see [Tours across apps](#tours-across-apps)).
+
+Turn it off for one step with `"followUser": false`, or for a whole tour with `"followUser": false` on the tour.
+Steps with `advanceOn`, `expectValue`, `tcode`, `fillValue` or `autoClick` keep their own rules.
+
+**In the editor:** on *Continue when: The user presses Next*, untick *Also continue when the user does this step
+directly in the app*.
+
 ## Ready-made tour: creating a sales order (VA01)
 
 [`tours/sales-order-gui.json`](webapp/tours/sales-order-gui.json) guides a user through a standard sales order in
@@ -508,6 +532,7 @@ A steps file:
 | `autoClick` | `true`: the guide clicks the target for the user, then goes on by itself. |
 | `actionDelay` | Milliseconds the step is shown before the guide fills / clicks (default 1500). |
 | `tcode` | `"VA01"`: transaction code step in SAP GUI for HTML (command field, ignores `/n` `/o`, continues on Enter). |
+| `followUser` | `false`: only the Next button moves on. Default: a Next step also goes on when the user does it in the app, see [Following the user](#following-the-user). |
 | `canClickTarget` | `false` blocks clicks on the highlighted element. |
 | `classes` | Extra CSS classes for the popup. |
 | `app` | The app this step (and the ones after it) is shown in, for [tours across apps](#tours-across-apps). |
