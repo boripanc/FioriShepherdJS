@@ -4,8 +4,9 @@
  * The author opens the editor in the app they want to explain, clicks "Add step", clicks a
  * control on the screen and types a title and text. The editor works out a stable way to
  * find that control again (see SelectorBuilder), so nobody has to deal with ids or JSON.
- * Tours are saved as drafts in the browser (visible only to the author) and exported as
- * index.json for deployment.
+ * Tours are saved as drafts in the browser (visible only to the author). From there they are
+ * published to the tour database (n8n, config toursApiUrl), so every user gets them at once,
+ * or exported as index.json for deployment.
  *
  * A tour can go across apps: the author keeps the editor open, opens the next app and adds
  * more steps there. Those steps remember their app ("app" in the tour JSON).
@@ -31,6 +32,7 @@ sap.ui.define([
 	"sap/m/ToolbarSpacer",
 	"sap/m/OverflowToolbar",
 	"sap/m/MessageToast",
+	"sap/m/MessageBox",
 	"sap/m/MessageStrip",
 	"sap/m/Dialog",
 	"sap/ui/core/Item",
@@ -43,7 +45,7 @@ sap.ui.define([
 	"../DraftStore",
 	"../AppMatch"
 ], function (JSONModel, Page, Bar, Title, Button, Label, Input, TextArea, CheckBox, Select, List, CustomListItem,
-	HBox, VBox, MText, ObjectStatus, Toolbar, ToolbarSpacer, OverflowToolbar, MessageToast, MessageStrip, Dialog, Item, Icon,
+	HBox, VBox, MText, ObjectStatus, Toolbar, ToolbarSpacer, OverflowToolbar, MessageToast, MessageBox, MessageStrip, Dialog, Item, Icon,
 	includeStylesheet, Text, TargetResolver, ElementPicker, SelectorBuilder, DraftStore, AppMatch) {
 	"use strict";
 
@@ -64,8 +66,11 @@ sap.ui.define([
 		return sPrefix ? "^" + escapeRegex(sPrefix) : "^$";
 	}
 
-	/** How the user moves on from a step: next | click | typeEnter | type */
+	/** How the user moves on from a step: next | click | auto (the guide clicks) | typeEnter | type */
 	function advanceOf(oStep) {
+		if (oStep.autoClick === true) {
+			return "auto";
+		}
 		if (oStep.tcode || (oStep.expectValue !== undefined && oStep.expectValue !== "")) {
 			return oStep.advanceOn === "input" ? "type" : "typeEnter";
 		}
@@ -152,6 +157,7 @@ sap.ui.define([
 				that._oModel.setProperty("/tours", aItems);
 				that._oModel.setProperty("/selectedTourKey", sKey);
 				that._refreshStepStates();
+				return that._updateDatabaseIds();
 			});
 		}
 		return this._oPlugin.getToursForContext().then(function (aTours) {
@@ -166,7 +172,23 @@ sap.ui.define([
 					return { key: s, text: that.t("editor.position." + s.replace("-", "_")) };
 				})
 			});
-			return that._loadTour(that._oModel.getProperty("/selectedTourKey"));
+			return Promise.all([that._loadTour(that._oModel.getProperty("/selectedTourKey")), that._updateDatabaseIds()]);
+		});
+	};
+
+	/** Which tours are in the tour database, for the "Remove from database" button. */
+	TourEditor.prototype._updateDatabaseIds = function () {
+		var that = this;
+		var bEnabled = !!(this._oPlugin.isDatabaseEnabled && this._oPlugin.isDatabaseEnabled());
+		this._oModel.setProperty("/dbEnabled", bEnabled);
+		if (!bEnabled) {
+			this._oModel.setProperty("/dbIds", []);
+			return Promise.resolve();
+		}
+		return this._oPlugin.getDatabaseIds().then(function (aIds) {
+			that._oModel.setProperty("/dbIds", aIds);
+		}, function () {
+			that._oModel.setProperty("/dbIds", []);
 		});
 	};
 
@@ -262,6 +284,9 @@ sap.ui.define([
 						expectValue: oStep.tcode && typeof oStep.tcode === "string" ? oStep.tcode
 							: Array.isArray(oStep.expectValue) ? oStep.expectValue.join(", ") : oStep.expectValue || "",
 						tcode: !!oStep.tcode,
+						fillValue: oStep.fillValue === undefined || oStep.fillValue === null ? "" : Text.resolve(oStep.fillValue),
+						fillValueI18n: typeof oStep.fillValue === "object" ? oStep.fillValue : null,
+						pressEnter: oStep.pressEnter === true,
 						targetLabel: oStep.target ? that._describeTarget(oStep.target) : that.t("editor.noTarget"),
 						quality: oStep.target ? (oFound ? "found" : "missing") : "none"
 					});
@@ -427,6 +452,7 @@ sap.ui.define([
 					items: [
 						new Item({ key: "next", text: this.t("editor.advance.next") }),
 						new Item({ key: "click", text: this.t("editor.advance.click") }),
+						new Item({ key: "auto", text: this.t("editor.advance.auto") }),
 						new Item({ key: "typeEnter", text: this.t("editor.advance.typeEnter") }),
 						new Item({ key: "type", text: this.t("editor.advance.type") })
 					]
@@ -441,6 +467,17 @@ sap.ui.define([
 				}),
 				new CheckBox({ wrapping: true, text: this.t("editor.tcode"), selected: "{tcode}",
 					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
+					select: this._markDirty.bind(this) }),
+				new Label({ text: this.t("editor.fillValue"), visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }" }),
+				new Input("fioriGuideEditorFillValue", {
+					value: "{fillValue}",
+					valueLiveUpdate: true,
+					placeholder: this.t("editor.fillValuePlaceholder"),
+					visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }",
+					liveChange: this._markDirty.bind(this)
+				}),
+				new CheckBox("fioriGuideEditorPressEnter", { wrapping: true, text: this.t("editor.pressEnter"), selected: "{pressEnter}",
+					visible: "{= ${quality} !== 'none' && (${advance} === 'next' || ${advance} === 'click') && !!${fillValue} }",
 					select: this._markDirty.bind(this) })
 			]
 		}).addStyleClass("fioriGuideEditorStepForm");
@@ -495,13 +532,24 @@ sap.ui.define([
 				content: [
 					new Button("fioriGuideEditorPreview", { text: this.t("editor.preview"), icon: "sap-icon://media-play", press: this._preview.bind(this) }),
 					new ToolbarSpacer(),
-					new Button("fioriGuideEditorSave", { text: this.t("editor.save"), type: "Emphasized", press: this._save.bind(this) }),
+					new Button("fioriGuideEditorSave", { text: this.t("editor.save"),
+						type: { path: "/dbEnabled", formatter: function (b) {
+							return b ? "Default" : "Emphasized";
+						} },
+						press: this._save.bind(this) }),
+					new Button("fioriGuideEditorPublish", { text: this.t("editor.publish"), icon: "sap-icon://upload-to-cloud", type: "Emphasized",
+						visible: "{/dbEnabled}", press: this._publish.bind(this) }),
 					new Button("fioriGuideEditorExport", { text: this.t("editor.export"), icon: "sap-icon://download", press: this._openExport.bind(this) }),
 					new Button({ text: this.t("editor.discardDraft"), icon: "sap-icon://undo", type: "Transparent",
 						visible: { path: "/tour/id", formatter: function (sId) {
 							return !!sId && !!DraftStore.get(sId);
 						} },
-						press: this._discardDraft.bind(this) })
+						press: this._discardDraft.bind(this) }),
+					new Button("fioriGuideEditorUnpublish", { text: this.t("editor.unpublish"), icon: "sap-icon://delete", type: "Transparent",
+						visible: { parts: ["/dbEnabled", "/dbIds", "/tour/id"], formatter: function (bEnabled, aIds, sId) {
+							return !!bEnabled && !!sId && (aIds || []).indexOf(sId) >= 0;
+						} },
+						press: this._unpublish.bind(this) })
 				]
 			})
 		});
@@ -588,7 +636,7 @@ sap.ui.define([
 			if (!oPick) {
 				return;
 			}
-			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false }, that._fromPick(oPick)));
+			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false }, that._fromPick(oPick)));
 			that._focusStepTitle();
 			if (oPick.quality === "fragile") {
 				MessageToast.show(that.t("editor.fragileHint"), { duration: 6000 });
@@ -597,7 +645,7 @@ sap.ui.define([
 	};
 
 	TourEditor.prototype._addMessageStep = function () {
-		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
+		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
 		this._focusStepTitle();
 	};
 
@@ -625,7 +673,9 @@ sap.ui.define([
 				position: "bottom-start",
 				advance: "typeEnter",
 				expectValue: "",
-				tcode: true
+				tcode: true,
+				fillValue: "",
+				pressEnter: false
 			}, that._fromPick(oPick)));
 			setTimeout(function () {
 				var oInput = sap.ui.getCore().byId("fioriGuideEditorExpectValue");
@@ -775,6 +825,8 @@ sap.ui.define([
 				oOut.position = oStep.position || "bottom";
 				if (oStep.advance === "click") {
 					oOut.advanceOn = "click";
+				} else if (oStep.advance === "auto") {
+					oOut.autoClick = true;
 				} else if ((oStep.advance === "typeEnter" || oStep.advance === "type") && String(oStep.expectValue || "").trim()) {
 					var aValues = String(oStep.expectValue).split(",").map(function (sValue) {
 						return sValue.trim();
@@ -785,8 +837,15 @@ sap.ui.define([
 						oOut.tcode = true;
 					}
 				}
+				// a value the guide types in for the user (not on "the user types" steps)
+				if (oStep.advance !== "typeEnter" && oStep.advance !== "type" && String(oStep.fillValue || "") !== "") {
+					oOut.fillValue = i18nValue(oStep.fillValueI18n, oStep.fillValue);
+					if (oStep.pressEnter && oStep.advance !== "auto") {
+						oOut.pressEnter = true;
+					}
+				}
 			}
-			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue"].forEach(function (sKey) {
+			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue", "actionDelay"].forEach(function (sKey) {
 				if (oStep[sKey] !== undefined && oStep[sKey] !== null) {
 					oOut[sKey] = oStep[sKey];
 				}
@@ -833,10 +892,11 @@ sap.ui.define([
 		this._oPlugin.previewTour(oDef);
 	};
 
+	/** Saves the tour as a draft in this browser. Resolves with the saved definition. */
 	TourEditor.prototype._save = function () {
 		var that = this;
 		if (!this._validate()) {
-			return;
+			return Promise.resolve(null);
 		}
 		var oDef = this._toDefinition();
 		var sOldId = this._oModel.getProperty("/tour/id");
@@ -849,13 +909,133 @@ sap.ui.define([
 		this._oModel.setProperty("/tour/id", oDef.id);
 		this._oModel.setProperty("/tour/version", oDef.version);
 		this._oModel.setProperty("/dirty", false);
-		this._oPlugin.onDraftsChanged().then(function () {
+		return this._oPlugin.onDraftsChanged().then(function () {
 			return that.refreshContext();
 		}).then(function () {
 			that._oModel.setProperty("/selectedTourKey", oDef.id);
 			return that._loadTour(oDef.id);
 		}).then(function () {
-			MessageToast.show(that.t("editor.saved"));
+			MessageToast.show(that.t(that._oModel.getProperty("/dbEnabled") ? "editor.savedDb" : "editor.saved"));
+			return oDef;
+		});
+	};
+
+	/** Asks for the publishing key once and keeps it in this browser. */
+	TourEditor.prototype._ensurePublishKey = function () {
+		var that = this;
+		var sKey = this._oPlugin.getPublishKey();
+		if (sKey) {
+			return Promise.resolve(sKey);
+		}
+		return new Promise(function (resolve, reject) {
+			var oInput = new Input("fioriGuideEditorPublishKey", { type: "Password", width: "100%", placeholder: that.t("editor.publishKeyPlaceholder") });
+			var bDone = false;
+			var oDialog = new Dialog({
+				title: that.t("editor.publishKeyTitle"),
+				contentWidth: "24rem",
+				content: [
+					new VBox({
+						items: [
+							new MText({ text: that.t("editor.publishKeyInfo") }).addStyleClass("sapUiSmallMarginBottom"),
+							oInput
+						]
+					}).addStyleClass("sapUiSmallMargin")
+				],
+				beginButton: new Button("fioriGuideEditorPublishKeyOk", { text: that.t("editor.publish"), type: "Emphasized", press: function () {
+					var sValue = String(oInput.getValue() || "").trim();
+					if (!sValue) {
+						return;
+					}
+					bDone = true;
+					that._oPlugin.setPublishKey(sValue);
+					oDialog.close();
+					resolve(sValue);
+				} }),
+				endButton: new Button({ text: that.t("editor.cancel"), press: function () {
+					oDialog.close();
+				} }),
+				afterClose: function () {
+					oDialog.destroy();
+					if (!bDone) {
+						reject(new Error("cancelled"));
+					}
+				}
+			});
+			oDialog.addStyleClass("sapUiSizeCompact");
+			oDialog.open();
+		});
+	};
+
+	TourEditor.prototype._showDatabaseError = function (oError) {
+		if (oError && oError.status === 401) {
+			this._oPlugin.setPublishKey("");
+			MessageBox.error(this.t("editor.publishKeyWrong"));
+			return;
+		}
+		MessageBox.error(this.t("editor.databaseFailed", [(oError && oError.message) || ""]));
+	};
+
+	/** Saves the tour in the tour database, so every user gets it right away. */
+	TourEditor.prototype._publish = function () {
+		var that = this;
+		if (!this._validate()) {
+			return Promise.resolve();
+		}
+		var sId = this._oModel.getProperty("/tour/id");
+		var pDef = this._oModel.getProperty("/dirty") || !sId ? this._save() : Promise.resolve(this._toDefinition());
+		var oDef;
+		return pDef.then(function (oSaved) {
+			if (!oSaved) {
+				throw new Error("cancelled");
+			}
+			oDef = oSaved;
+			return that._ensurePublishKey();
+		}).then(function () {
+			that._oPage.setBusy(true);
+			return that._oPlugin.publishTour(oDef);
+		}).then(function () {
+			that._oPage.setBusy(false);
+			return that.refreshContext();
+		}).then(function () {
+			that._oModel.setProperty("/selectedTourKey", oDef.id);
+			return that._loadTour(oDef.id);
+		}).then(function () {
+			MessageToast.show(that.t("editor.published"));
+		}).catch(function (oError) {
+			that._oPage.setBusy(false);
+			if (oError && oError.message === "cancelled") {
+				return;
+			}
+			that._showDatabaseError(oError);
+		});
+	};
+
+	TourEditor.prototype._unpublish = function () {
+		var that = this;
+		var sId = this._oModel.getProperty("/tour/id");
+		MessageBox.confirm(this.t("editor.unpublishConfirm", [this._oModel.getProperty("/tour/title") || sId]), {
+			onClose: function (sAction) {
+				if (sAction !== MessageBox.Action.OK) {
+					return;
+				}
+				that._ensurePublishKey().then(function () {
+					that._oPage.setBusy(true);
+					return that._oPlugin.unpublishTour(sId);
+				}).then(function () {
+					that._oPage.setBusy(false);
+					that._oModel.setProperty("/dirty", false);
+					that._oModel.setProperty("/tour", null);
+					return that.refreshContext();
+				}).then(function () {
+					MessageToast.show(that.t("editor.unpublished"));
+				}).catch(function (oError) {
+					that._oPage.setBusy(false);
+					if (oError && oError.message === "cancelled") {
+						return;
+					}
+					that._showDatabaseError(oError);
+				});
+			}
 		});
 	};
 

@@ -15,6 +15,11 @@
  *   blockWrongValue false lets Enter through even when the typed value is wrong (default: blocked)
  *   tcode          "VA01": shortcut for a transaction code step in SAP GUI for HTML (command field,
  *                  ignores /n and /o, continues on Enter)
+ *   fillValue      the tour types this into the target field for the user (UI5 input or SAP GUI field)
+ *   pressEnter     after fillValue: the tour also presses Enter in the field and goes on
+ *   autoClick      true: the tour clicks the target for the user (after fillValue, if any) and goes on
+ *   actionDelay    ms the step is shown before the tour fills / clicks, so the user can follow
+ *                  (default 1500)
  *   showNext       keep the Next button although advanceOn is set
  *   canClickTarget false blocks clicks on the highlighted element (default true)
  *   classes        extra CSS classes for the step popup
@@ -32,10 +37,12 @@ sap.ui.define([
 	"./Text",
 	"./FrameProxy",
 	"./InputCheck",
-	"./AppMatch"
-], function (ShepherdLoader, TargetResolver, Text, FrameProxy, InputCheck, AppMatch) {
+	"./AppMatch",
+	"./StepAction"
+], function (ShepherdLoader, TargetResolver, Text, FrameProxy, InputCheck, AppMatch, StepAction) {
 	"use strict";
 
+	var ACTION_DELAY_MS = 1500; // how long a step is shown before the tour fills / clicks for the user
 	var RESUME_WAIT_MS = 10000; // a freshly opened app may need a while to render its controls
 
 	function TourRunner(mSettings) {
@@ -248,6 +255,9 @@ sap.ui.define([
 		if (bExpect && sAdvanceEvent !== "input") {
 			sAdvanceEvent = "enter"; // typed values are confirmed with Enter unless stated otherwise
 		}
+		var bFill = vTarget && oStep.fillValue !== undefined && oStep.fillValue !== null;
+		// the tour moves on by itself after clicking / pressing Enter for the user
+		var bAuto = !!vTarget && (oStep.autoClick === true || (bFill && oStep.pressEnter === true));
 		var sStepId = oStep.id ? String(oStep.id).replace(/[^\w-]/g, "_") : "step-" + (iIndex + 1);
 		var oFound = null; // the real element (may be inside an iframe)
 		var oProxy = null; // stand-in in the Launchpad page for elements inside an iframe
@@ -285,7 +295,7 @@ sap.ui.define([
 				}
 			});
 		}
-		if (!sAdvanceEvent || oStep.showNext) {
+		if ((!sAdvanceEvent && !bAuto) || oStep.showNext) {
 			aButtons.push({
 				text: oBundle.getText(bLast ? "btnDone" : "btnNext"),
 				classes: "fioriGuideBtn fioriGuideBtnPrimary",
@@ -413,6 +423,46 @@ sap.ui.define([
 			}, 350);
 		}
 
+		/** Fills the field and / or clicks the target for the user, after a short pause. */
+		function setupAction(oStepEl) {
+			var oBox = document.createElement("div");
+			oBox.className = "fioriGuideAuto";
+			oBox.setAttribute("aria-live", "polite");
+			oBox.textContent = oBundle.getText(bAuto ? "autoDoing" : "autoFilling");
+			var oText = oStepEl && (oStepEl.querySelector(".shepherd-text") || oStepEl.querySelector(".shepherd-content"));
+			if (oText) {
+				oText.appendChild(oBox);
+			}
+			var oDom = oFound;
+			var iDelay = typeof oStep.actionDelay === "number" ? Math.max(oStep.actionDelay, 0) : ACTION_DELAY_MS;
+			var iTimer = setTimeout(function () {
+				iTimer = 0;
+				if (!oTour.isActive() || oTour.getCurrentStep() !== oTour.getById(sStepId)) {
+					return;
+				}
+				if (bFill) {
+					StepAction.fill(oDom, Text.resolve(oStep.fillValue));
+				}
+				if (bFill && oStep.pressEnter === true) {
+					StepAction.pressEnter(oDom);
+				}
+				if (oStep.autoClick === true) {
+					StepAction.click(oDom);
+				}
+				oBox.classList.add("fioriGuideAutoDone");
+				oBox.textContent = oBundle.getText("autoDone");
+				if (bAuto) {
+					// let the app react first (open a dialog, load the next screen)
+					setTimeout(goOn, 400);
+				}
+			}, iDelay);
+			aCleanup.push(function () {
+				if (iTimer) {
+					clearTimeout(iTimer);
+				}
+			});
+		}
+
 		var oOptions = {
 			id: sStepId,
 			title: Text.resolve(oStep.title),
@@ -433,7 +483,7 @@ sap.ui.define([
 					}
 					if (bExpect && oFound) {
 						setupExpectedValue(oStepEl);
-					} else if (sAdvanceEvent && sAdvanceEvent !== "enter" && sAdvanceEvent !== "input" && oFound) {
+					} else if (!bAuto && sAdvanceEvent && sAdvanceEvent !== "enter" && sAdvanceEvent !== "input" && oFound) {
 						var bFired = false;
 						listen(oFound, sAdvanceEvent, function () {
 							if (!bFired) {
@@ -442,6 +492,11 @@ sap.ui.define([
 								setTimeout(goOn, 50);
 							}
 						});
+					}
+					if ((bFill || bAuto) && oFound) {
+						setupAction(oStepEl);
+					} else if (bAuto) {
+						setTimeout(goOn, 0); // nothing to click on: do not leave the user without a button
 					}
 				},
 				hide: function () {

@@ -161,3 +161,19 @@
 	pointer-events: none;
 	z-index: -1;
 }
+
+/* A step the tour does for the user (fillValue / autoClick) */
+.fioriGuideAuto {
+	margin-top: 0.625rem;
+	padding: 0.5rem 0.625rem;
+	border-radius: 0.5rem;
+	background: var(--sapInformationBackground, #e1f4ff);
+	border: 1px dashed var(--sapInformationBorderColor, #0070f2);
+	font-size: var(--sapFontSize, 0.875rem);
+	font-style: italic;
+}
+.fioriGuideAuto.fioriGuideAutoDone {
+	background: var(--sapSuccessBackground, #f5fae5);
+	border-color: var(--sapSuccessBorderColor, #36a41d);
+	font-style: normal;
+}

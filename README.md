@@ -69,7 +69,22 @@ npm test
    `version`, so users see the updated tour once.
 
 `enableEditor` controls access: `"url"` (default, as above), `true` (always) or `false` (never, e.g. in production).
-Drafts never leave the author's browser until they are exported, so the editor is safe to leave on: other users see nothing.
+Drafts never leave the author's browser until they are published or exported, so the editor is safe to leave on: other users see nothing.
+
+## Tours in a database (n8n)
+
+Instead of exporting `index.json` and redeploying, authors can **Publish** a tour from the editor. It is then saved in
+an n8n data table and every user gets it on their next Launchpad load. The plugin reads the tours from n8n
+(`toursApiUrl`) and adds them to the tours in `tours/index.json`; a database tour wins over a file tour with the
+same id. If n8n cannot be reached, the file tours still work.
+
+- **Publish** saves the draft and sends it to n8n. The first time, the editor asks for the *publishing key* (kept in
+  that browser only). The key is the `publish_key` row of the n8n data table `FioriGuideConfig`; change it there to
+  lock out old keys.
+- **Remove from database** (in the editor footer's ⋯ menu) deletes the tour from n8n.
+- **Export** still works and includes the database tours with their steps, so it doubles as a backup.
+
+The n8n side is two workflows and two data tables, described in [n8n/README.md](n8n/README.md).
 
 ## Guiding users to type a transaction code
 
@@ -110,6 +125,31 @@ Launchpad, which is the normal setup on an ABAP front-end server. Browsers do no
 from a different server, and the desktop SAP GUI (SAP Logon) is outside the browser, so neither can be guided.
 The command field is found by its id `ToolbarOkCode` (and older variants); this was tested against a mock SAP GUI page,
 so please try it on your system's SAP GUI for HTML first.
+
+## Steps the guide does for the user
+
+A step can fill in a field or click an element itself, so users see a sample value or the tour moves along a
+demo without them doing every click:
+
+```json
+{ "target": { "controlId": "searchField" }, "fillValue": "Domestic", "pressEnter": true },
+{ "target": { "controlType": "sap.m.Button", "text": "Create" }, "autoClick": true },
+{ "target": { "controlId": "newCustomer" }, "fillValue": "ACME Corp" }
+```
+
+- `fillValue` types the value into the highlighted field. The step stays open with its Next button, so the user can
+  check or change the value.
+- `pressEnter: true` (with `fillValue`) also presses Enter in the field, and the tour goes on by itself.
+- `autoClick: true` clicks the highlighted element (after filling it, if `fillValue` is set) and the tour goes on by itself.
+- The step is shown for 1.5 seconds first so the user sees what happens; change that with `actionDelay` (milliseconds).
+
+For UI5 apps the value is set through the control, so the app's data binding and change handlers see it as if the
+user typed it. SAP GUI for HTML fields get the browser events typing and clicking cause; this was tested against the
+mock SAP GUI page, so try it on your system first. Be careful with `autoClick` on buttons that save or post
+something: the guide really presses them.
+
+**In the editor:** set *Continue when* to *The guide clicks the element for the user*, and/or enter a value in
+*Value the guide fills in for the user*. *Then press Enter for the user* appears once a value is entered.
 
 ## Tours across apps
 
@@ -203,6 +243,10 @@ A steps file:
 | `skipIfMissing` | `true` skips the step when its target is not on screen. |
 | `advanceOn` | `"click"` (or another DOM event): go to the next step when the user does this on the target. The Next button is hidden unless `showNext: true`. With `expectValue`: `"enter"` (default) or `"input"`. |
 | `expectValue` | The user must type this into the target field, e.g. `"VA01"`. See [transaction codes](#guiding-users-to-type-a-transaction-code). |
+| `fillValue` | The guide types this into the target field for the user. See [steps the guide does](#steps-the-guide-does-for-the-user). |
+| `pressEnter` | With `fillValue`: also press Enter in the field, then go on by itself. |
+| `autoClick` | `true`: the guide clicks the target for the user, then goes on by itself. |
+| `actionDelay` | Milliseconds the step is shown before the guide fills / clicks (default 1500). |
 | `tcode` | `"VA01"`: transaction code step in SAP GUI for HTML (command field, ignores `/n` `/o`, continues on Enter). |
 | `canClickTarget` | `false` blocks clicks on the highlighted element. |
 | `classes` | Extra CSS classes for the popup. |
@@ -230,6 +274,7 @@ Defaults are in `manifest.json` (`sap.ui5/config/fioriGuide`). The Launchpad can
 | Parameter | Default | Meaning |
 |---|---|---|
 | `toursUrl` | the plugin's own `tours/` folder | Where `index.json` lives. Point it to a separate BSP or static location so tours can be updated without redeploying the plugin. |
+| `toursApiUrl` | `https://n8n.teddybiere.info/webhook/fiori-guide` | Base URL of the tour database API (n8n webhooks). Empty turns the database off and only `index.json` is used. |
 | `autoStart` | `true` | Start a tour automatically the first time a user opens its app. |
 | `autoStartDelay` | `1000` | Milliseconds to wait after the app loads before auto-starting. |
 | `showHeaderButton` | `true` | Show the Guided Tour button in the shell header. |
