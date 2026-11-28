@@ -273,8 +273,15 @@ npm test
    - *good*: found by type and text (e.g. the Button "Create")
    - *fragile*: only a CSS path; pick a labeled element or its parent instead.
    The ⤢ button switches to the surrounding, larger control (e.g. the whole filter instead of one of its buttons).
-5. Type a title and text, choose where the popup appears, and optionally tick
-   **Wait until the user clicks the element** for hands-on steps. **Add message** adds a centered step without an element.
+5. Type a title and text and choose where the popup appears. Every step can then say what happens in it, all in the
+   same form (there are no separate step types):
+   - **Who does this step**: *The user* or *The guide, for the user*.
+   - **Value**: what the user must type (e.g. `VA01`, several allowed: `VA01, VA02`) or what the guide types in.
+     *It is a transaction code* also accepts `/n` and `/o` in front.
+   - **Then**: *Nothing more*, *Press Enter* or *Click the element*.
+   A line below says how the step continues, e.g. "Continues when the user types the value and presses Enter".
+   Picking the SAP GUI command field sets up a transaction code step (the user types it and presses Enter) by itself.
+   **Add message** adds a centered step without an element.
 6. **Preview** plays the tour, **Save draft** keeps it in this browser (only you see it, as a normal tour in the Guided Tour button).
 7. **Export** produces the complete `index.json` (existing tours plus your drafts). Hand it to your Fiori administrator,
    who replaces `tours/index.json` (or the file at `toursUrl`) and deploys. Saving a changed existing tour bumps its
@@ -327,8 +334,9 @@ Steps can ask the user to type something specific, such as a transaction code, a
 `expectValue` can be one value, a list (`["VA01", "VA02"]`) or a regular expression (`"/^VA0[12]$/"`, with
 `expectHint` for what to show the user). `advanceOn: "input"` continues as soon as the value is right, without Enter.
 
-**In the editor:** press **Add T-code step** (with the SAP GUI screen open it picks the command field by itself) and
-enter the code, or, for any picked field, set *Continue when* to *The user types a value (and presses Enter)*.
+**In the editor:** press **Add step** and click the SAP GUI command field (or any field), enter the value the user
+types and set *Then* to *Press Enter* (the command field starts like that). *Then: Nothing more* continues as soon as
+the value is typed.
 
 The tour moves on as soon as the transaction screen opens, also when SAP GUI handles the Enter key itself or
 loads a new page for the transaction. In that case a wrong code can't be blocked before SAP GUI sees it; the step
@@ -362,8 +370,9 @@ user typed it. SAP GUI for HTML fields get the browser events typing and clickin
 mock SAP GUI page, so try it on your system first. Be careful with `autoClick` on buttons that save or post
 something: the guide really presses them.
 
-**In the editor:** set *Continue when* to *The guide clicks the element for the user*, and/or enter a value in
-*Value the guide fills in for the user*. *Then press Enter for the user* appears once a value is entered.
+**In the editor:** set *Who does this step* to *The guide, for the user*, enter the value the guide types in (optional)
+and choose *Then*: *Press Enter* or *Click the element* (the tour goes on by itself), or *Nothing more* (the user
+checks the value and presses Next).
 
 ## Following the user
 
@@ -384,7 +393,7 @@ app, the tour already goes on there by itself (see [Tours across apps](#tours-ac
 Turn it off for one step with `"followUser": false`, or for a whole tour with `"followUser": false` on the tour.
 Steps with `advanceOn`, `expectValue`, `tcode`, `fillValue` or `autoClick` keep their own rules.
 
-**In the editor:** on *Continue when: The user presses Next*, untick *Also continue when the user does this step
+**In the editor:** on a step where the user does it with no value and *Then: Nothing more*, untick *Also continue when the user does this step
 directly in the app*.
 
 ## Ready-made tour: creating a sales order (VA01)

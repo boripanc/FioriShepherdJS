@@ -156,3 +156,8 @@ body.fioriGuidePicking * {
 	right: auto;
 	left: 0.75rem;
 }
+
+.fioriGuideEditorContinues {
+	color: var(--sapContent_LabelColor, #556b82);
+	font-size: var(--sapFontSmallSize, 0.75rem);
+}

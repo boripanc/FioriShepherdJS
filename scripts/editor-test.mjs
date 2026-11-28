@@ -10,6 +10,11 @@ const BASE = (process.env.BASE_URL || "http://localhost:8080/test/flpSandbox.htm
 const SHOTS = "screenshots/editor";
 mkdirSync(SHOTS, { recursive: true });
 
+const choose = async (sSelect, sText) => {
+	await page.click(sSelect);
+	await page.click(`.sapMSelectList:visible li:text-is("${sText}")`);
+	await page.waitForTimeout(200);
+};
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: 2, acceptDownloads: true });
 const page = await context.newPage();
@@ -86,10 +91,11 @@ try {
 	await page.fill("#fioriGuideEditorStepTitleInput-inner", "Create a new order");
 	await page.fill("#fioriGuideEditorStepTextInput-inner", "When you need a new order, start here.");
 	// "the guide clicks it for the user" with a value to fill in, saved as autoClick / fillValue
-	await page.click("#fioriGuideEditorAdvance");
-	await page.click(".sapMSelectList li:has-text('The guide clicks the element for the user')");
-	await page.fill("#fioriGuideEditorFillValue-inner", "Sample");
-	check(!(await page.locator("#fioriGuideEditorPressEnter").isVisible()), "Press Enter is not offered when the guide clicks anyway");
+	await choose("#fioriGuideEditorDoer", "The guide, for the user");
+	await page.fill("#fioriGuideEditorValue-inner", "Sample");
+	await choose("#fioriGuideEditorThen", "Click the element");
+	check(/guide clicks/i.test(await page.textContent("#fioriGuideEditorContinues")), "The step says the guide clicks and goes on");
+	check(await page.locator("#fioriGuideEditorTcode").isVisible() === false, "No T-code option for a value the guide types");
 	await page.click("#fioriGuideEditorSave");
 	await page.waitForTimeout(1200);
 	const autoDraft = Object.values(await page.evaluate(() => JSON.parse(localStorage.getItem("fiori.shepherd.guide.drafts") || "{}")))[0];
@@ -98,10 +104,10 @@ try {
 	// saving reloads the tour: open step 2 again, the fill value comes back from the draft
 	await page.locator("#fioriGuideEditor .fioriGuideEditorStepTarget").nth(1).click();
 	await page.waitForTimeout(300);
-	check(await page.inputValue("#fioriGuideEditorFillValue-inner") === "Sample", "The fill value is loaded back into the editor");
-	await page.fill("#fioriGuideEditorFillValue-inner", "");
-	await page.click("#fioriGuideEditorAdvance");
-	await page.click(".sapMSelectList li:has-text('The user clicks the element')");
+	check(await page.inputValue("#fioriGuideEditorValue-inner") === "Sample", "The fill value is loaded back into the editor");
+	await page.fill("#fioriGuideEditorValue-inner", "");
+	await choose("#fioriGuideEditorDoer", "The user");
+	check(await page.locator("#fioriGuideEditorValue").isVisible() === false, "No value field when the user only clicks");
 	await shot("3-step-details");
 
 	// save the draft
@@ -165,19 +171,29 @@ try {
 	await page.click("#fioriGuideEditor .sapMSlt");
 	await page.click(".sapMSelectList li:has-text('+ New tour')");
 	await page.fill("#fioriGuideEditorTourTitle-inner", "Start VA01");
-	await page.click("#fioriGuideEditorAddTcode");
+	// the GUI fields are on the left, so move the panel to the right
+	await page.click("#fioriGuideEditorDock");
+	await page.waitForTimeout(400);
+	check(await page.locator("#fioriGuideEditorAddTcode").count() === 0, "There is no separate T-code step button");
+	await page.click("#fioriGuideEditorAddStep");
+	await page.waitForTimeout(300);
+	const okBox = await gui.locator("#ToolbarOkCode").boundingBox();
+	await page.mouse.move(okBox.x + 10, okBox.y + okBox.height / 2);
+	await page.mouse.click(okBox.x + 10, okBox.y + okBox.height / 2);
 	await page.waitForTimeout(500);
 	const tcodeLabel = await targetLabel();
-	check(/command field/i.test(tcodeLabel), `"Add T-code step" targets the SAP GUI command field automatically (${tcodeLabel})`);
-	await page.fill("#fioriGuideEditorExpectValue-inner", "VA01");
+	check(/command field/i.test(tcodeLabel), `Picking the SAP GUI command field is recognised (${tcodeLabel})`);
+	await page.fill("#fioriGuideEditorValue-inner", "VA01");
+	check(await page.locator("#fioriGuideEditorTcode input").isChecked(), "The command field step is a T-code step with Enter by default");
+	check(/presses Enter/i.test(await page.textContent("#fioriGuideEditorContinues")), "It continues on Enter");
+	await page.locator("#fioriGuideEditorFollowUser, #fioriGuideEditorContinues").last().scrollIntoViewIfNeeded();
+	await shot("9b-step-actions");
 	await shot("9-tcode-step");
 
 	// open VA01 in the GUI, then pick a field inside the GUI screen
 	await gui.locator("#ToolbarOkCode").fill("VA01");
 	await gui.locator("#ToolbarOkCode").press("Enter");
 	await gui.locator("[title='Sales Document Type']").waitFor();
-	// the GUI fields are on the left, so move the panel back to the right
-	await page.click("#fioriGuideEditorDock");
 	await page.click("#fioriGuideEditorAddStep");
 	await page.waitForTimeout(300);
 	const field = gui.locator("[title='Sales Document Type']");
@@ -190,9 +206,8 @@ try {
 	const guiLabel = await targetLabel();
 	check(/Sales Document Type|Order Type|M0:46/.test(guiLabel), `Field inside the SAP GUI screen can be picked (${guiLabel})`);
 	await page.fill("#fioriGuideEditorStepTitleInput-inner", "Order type");
-	await page.click("#fioriGuideEditorAdvance");
-	await page.click(".sapMSelectList li:has-text('The user types a value'):not(:has-text('Enter'))");
-	await page.fill("#fioriGuideEditorExpectValue-inner", "OR");
+	await page.fill("#fioriGuideEditorValue-inner", "OR");
+	check(/as soon as/i.test(await page.textContent("#fioriGuideEditorContinues")), "Typing a value with nothing after continues as soon as it is typed");
 	await page.click("#fioriGuideEditorSave");
 	await page.waitForTimeout(1200);
 	const drafts2 = await page.evaluate(() => JSON.parse(localStorage.getItem("fiori.shepherd.guide.drafts") || "{}"));

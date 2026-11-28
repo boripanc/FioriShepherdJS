@@ -51,8 +51,8 @@ try {
 	await page.fill("#fioriGuideEditorTourTitle-inner", "Find an order from the home page");
 	await pickAt(page.locator(".sapMGT:has-text('Manage Sales Orders')"));
 	await page.fill("#fioriGuideEditorStepTitleInput-inner", "Open the app");
-	await page.click("#fioriGuideEditorAdvance");
-	await page.click(".sapMSelectList li:has-text('The user clicks the element')");
+	await page.click("#fioriGuideEditorThen");
+	await page.click(".sapMSelectList:visible li:text-is('Click the element')");
 
 	// the author opens the app; the editor keeps the tour
 	await page.evaluate(() => { window.location.hash = "#SalesOrder-manage"; });
