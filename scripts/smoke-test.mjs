@@ -89,8 +89,22 @@ try {
 	await page.screenshot({ path: `${SHOTS}/6-chooser.png` });
 	// ---- SAP GUI for HTML (mock): transaction code step ----
 	await page.keyboard.press("Escape");
-	await page.evaluate(() => { window.location.hash = "#SalesDocument-createGui"; });
-	await page.waitForSelector(".shepherd-element:visible", { timeout: 30000 });
+	// the T-code checks use their own tour (the shipped VA01 guide opens VA01 directly), as an author draft
+	await page.evaluate(() => {
+		localStorage.setItem("fiori.shepherd.guide.drafts", JSON.stringify({
+			"tcode-demo": {
+				id: "tcode-demo", title: "Start VA01", intent: "SalesDocument-createGui", autoStart: true, version: 1,
+				steps: [
+					{ id: "welcome", title: "Create a sales order", text: "Start VA01 and fill in the first screen." },
+					{ id: "tcode", title: "Start the transaction", text: "Type the transaction code and press Enter.", tcode: "VA01", position: "bottom-start" },
+					{ id: "order-type", title: "Order type", text: "Enter OR.", target: { frame: true, selector: "[title='Sales Document Type']" }, expectValue: "OR", advanceOn: "input", position: "right", waitFor: 8000 },
+					{ id: "sales-org", title: "Sales organization", text: "Enter your sales organization.", target: { frame: true, selector: "[title='Sales Organization']" }, position: "right" }
+				]
+			}
+		}));
+	});
+	await page.goto(BASE + "?fiori-guide-editor=true#SalesDocument-createGui");
+	await page.waitForSelector(".shepherd-element:visible", { timeout: 60000 });
 	check((await stepTitle()).trim() === "Create a sales order", "SAP GUI tour auto-starts");
 	await page.click(".shepherd-element:visible .fioriGuideBtnPrimary");
 	await page.waitForTimeout(1200);

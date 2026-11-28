@@ -365,16 +365,23 @@ something: the guide really presses them.
 ## Ready-made tour: creating a sales order (VA01)
 
 [`tours/sales-order-gui.json`](webapp/tours/sales-order-gui.json) guides a user through a standard sales order in
-SAP GUI for HTML, in 16 steps:
+SAP GUI for HTML, in 15 steps:
 
-1. Start **VA01** in the command field (skipped with Next when VA01 is already open).
+1. The guide opens **VA01** directly (start page `#Shell-startGUI?sap-ui2-tcode=VA01`).
 2. Initial screen: order type (`OR`), sales organization, distribution channel, division, then Enter.
 3. Overview: sold-to party, ship-to party, customer reference (PO number), requested delivery date.
 4. First item: material and order quantity, Enter to check price and availability.
 5. Save, and where to find the new order number.
 
-The user types every value; the tour only points and explains. It is in the catalog for the intent
-`SalesDocument-createGui`: change `intent` in `index.json` to the intent of the VA01 tile on your Launchpad.
+The user types every value; the tour only points and explains. In the catalog it has the intent `Shell-startGUI`
+and the start page `#Shell-startGUI?sap-ui2-tcode=VA01`, the standard Launchpad way to open a SAP GUI for HTML
+transaction. Users start it from **All guides...** in the Guided Tour button (it opens VA01 and begins), and it
+starts by itself the first time a user opens VA01 that way. If your users open VA01 from a tile with its own intent,
+put that tile's hash (the part after `#` in the browser address) into `start` and its intent into `intent`.
+
+If the Launchpad says it "could not resolve navigation target #Shell-startGUI", the user's roles lack the SAP GUI
+start-up target mapping (normally part of the SAP-delivered technical catalogs for SAP GUI transactions, e.g. the
+ones behind your VA01 tile); add a role with it, or use the tile's own hash as above.
 
 Fields are found by their SAP GUI tooltip (`title`), ignoring case, with a few alternatives for different
 releases, e.g. `[title='Sold-To Party' i], [title='Sold-to party number' i]`. These names were checked against the
@@ -396,7 +403,7 @@ A tour keeps going when the user moves from one screen or app to the next:
 { "title": "Open the app", "target": { "controlType": "sap.m.GenericTile", "properties": { "header": "Manage Sales Orders" } }, "advanceOn": "click" },
 { "title": "Check existing orders", "app": "SalesOrder-manage", "target": { "controlId": "searchField" } },
 { "title": "Create the order in SAP GUI", "text": "Press Next to open VA01." },
-{ "title": "Start the transaction", "app": { "intent": "SalesDocument-createGui", "hash": "#SalesDocument-createGui" }, "tcode": "VA01" }
+{ "title": "Order type", "app": { "intent": "Shell-startGUI", "hash": "#Shell-startGUI?sap-ui2-tcode=VA01" }, "target": { "frame": true, "selector": "[title='Sales Document Type']" } }
 ```
 
 How it behaves:

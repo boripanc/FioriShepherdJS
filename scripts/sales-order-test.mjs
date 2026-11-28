@@ -41,19 +41,16 @@ try {
 	});
 	await page.reload();
 	await page.waitForSelector("#fioriShepherdGuideHeaderButton", { timeout: 60000 });
-	await page.evaluate(() => { window.location.hash = "#SalesDocument-createGui"; });
+	// the guide's start page, as on an ABAP front-end server
+	await page.evaluate(() => { window.location.hash = "#Shell-startGUI?sap-ui2-tcode=VA01"; });
 	await waitForStep("Create a sales order", 30000);
-	check(true, "Tour starts when VA01 (SAP GUI) is opened");
+	check(true, "Tour starts when VA01 is opened with #Shell-startGUI?sap-ui2-tcode=VA01");
 	await shot("welcome");
 	await next();
 
-	await waitForStep("Start the transaction");
 	const gui = page.frameLocator("iframe");
-	await shot("tcode");
-	await gui.locator("#ToolbarOkCode").fill("VA01");
-	await gui.locator("#ToolbarOkCode").press("Enter");
-
 	await waitForStep("Order type");
+	check((await gui.locator("h1").textContent()) === "Create Sales Documents", "SAP GUI opened VA01 directly");
 	check(await attached(), "Order type step points at the field");
 	await shot("order-type");
 	await gui.locator("[title='Sales Document Type']").type("OR");

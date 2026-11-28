@@ -67,8 +67,8 @@ try {
 	await page.click(`${visibleStep} .fioriGuideBtnPrimary`);
 	await waitForStep("Create the order in SAP GUI", 10000);
 	await page.click(`${visibleStep} .fioriGuideBtnPrimary`);
-	await waitForStep("Start the transaction");
-	check(page.url().includes("#SalesDocument-createGui"), "Next opened the SAP GUI app named by the step");
+	await waitForStep("Order type");
+	check(page.url().includes("#Shell-startGUI?sap-ui2-tcode=VA01"), "Next opened the SAP GUI transaction named by the step");
 	await page.waitForTimeout(400);
 	await page.screenshot({ path: `${SHOTS}/journey-3-gui.png` });
 
@@ -79,17 +79,14 @@ try {
 	check((await session())?.index === 4, "The paused step is remembered");
 	await page.click("#fioriShepherdGuideHeaderButton");
 	await page.waitForSelector("#fioriShepherdGuideContinue", { timeout: 10000 });
-	check(/Continue .*step 5 of 6/.test(await page.locator("#fioriShepherdGuideContinue").textContent()), "Header button offers to continue the paused tour");
+	check(/Continue .*step 5 of 5/.test(await page.locator("#fioriShepherdGuideContinue").textContent()), "Header button offers to continue the paused tour");
 	await page.waitForTimeout(400);
 	await page.screenshot({ path: `${SHOTS}/journey-4-continue.png` });
 	await page.click("#fioriShepherdGuideContinue");
-	await waitForStep("Start the transaction");
-	check(page.url().includes("#SalesDocument-createGui"), "Continue opens the app of the paused step and the tour goes on");
+	await waitForStep("Order type", 15000);
+	check(page.url().includes("#Shell-startGUI?sap-ui2-tcode=VA01"), "Continue opens the app of the paused step and the tour goes on");
 
 	const gui = page.frameLocator("iframe");
-	await gui.locator("#ToolbarOkCode").fill("VA01");
-	await gui.locator("#ToolbarOkCode").press("Enter");
-	await waitForStep("Order type", 15000);
 	await gui.locator("[title='Sales Document Type']").type("OR");
 	await page.waitForTimeout(1500);
 	check(await page.locator(visibleStep).count() === 0, "Last step finishes the tour");

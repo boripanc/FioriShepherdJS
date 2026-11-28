@@ -79,7 +79,7 @@ try {
 	await page.screenshot({ path: `${SHOTS}/all-guides.png` });
 	await page.click(`#fioriShepherdGuideAllGuidesDialog-dialog .sapMSLI:has-text("Create a sales order in SAP GUI")`);
 	await waitForStep("Create a sales order");
-	check(page.url().includes("#SalesDocument-createGui"), "Choosing a guide of another app opens that app and starts the guide");
+	check(page.url().includes("#Shell-startGUI?sap-ui2-tcode=VA01"), "Choosing a guide of another app opens its start page and starts the guide");
 	await page.click(".shepherd-element:visible .shepherd-cancel-icon");
 
 	// 2) a start page with parameters: offered everywhere, belongs only to that exact page

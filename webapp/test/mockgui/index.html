@@ -106,7 +106,13 @@
 		if (e.key === "Enter") { run(); }
 	});
 	var start = /[?&]screen=(\w+)/.exec(location.search);
-	show(start && screens[start[1]] ? start[1] : "home");
+	// opened with #Shell-startGUI?sap-ui2-tcode=VA01: start in that transaction, like SAP GUI for HTML
+	var tcode = null;
+	try {
+		tcode = /[?&]sap-ui2-tcode=([^&]+)/i.exec(location.search + "&" + parent.location.hash);
+	} catch (e) { /* not in the Launchpad */ }
+	var first = start ? start[1] : tcode ? decodeURIComponent(tcode[1]).toUpperCase().replace(/^\/[NO]/, "") : "home";
+	show(screens[first] ? first : "home");
 </script>
 </body>
 </html>

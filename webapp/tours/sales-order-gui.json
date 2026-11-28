@@ -1,18 +1,10 @@
 {
-	"$comment": "Create a standard sales order with VA01 in SAP GUI for HTML: initial screen, header data, one item, save. Field selectors use the SAP GUI field tooltips (title attribute), case-insensitive, with alternatives for different releases. If a field is not found the step is shown in the middle of the screen, so the text still tells the user what to do. Re-pick a field in the tour editor if it is not highlighted on your system.",
+	"$comment": "Create a standard sales order with VA01 in SAP GUI for HTML. The catalog entry opens VA01 directly (start page #Shell-startGUI?sap-ui2-tcode=VA01). Steps: initial screen, header data, one item, save. Field selectors use the SAP GUI field tooltips (title attribute), case-insensitive, with alternatives for different releases. If a field is not found the step is shown in the middle of the screen, so the text still tells the user what to do. Re-pick a field in the tour editor if it is not highlighted on your system.",
 	"steps": [
 		{
 			"id": "welcome",
 			"title": "Create a sales order",
-			"text": "<p>This tour walks you through creating a standard sales order with transaction <b>VA01</b>:</p><ol><li>Choose the order type and sales area</li><li>Enter the customer and the purchase order number</li><li>Add the material and quantity</li><li>Save the order</li></ol><p>You type the values yourself; the tour shows you where.</p>"
-		},
-		{
-			"id": "tcode",
-			"title": "Start the transaction",
-			"text": "Click the command field, type the transaction code and press <b>Enter</b>.<br>If the <i>Create Sales Documents</i> screen is already open, just choose <b>Next</b>.",
-			"tcode": "VA01",
-			"showNext": true,
-			"position": "bottom-start"
+			"text": "<p>This tour walks you through creating a standard sales order with transaction <b>VA01</b> (Create Sales Documents):</p><ol><li>Choose the order type and sales area</li><li>Enter the customer and the purchase order number</li><li>Add the material and quantity</li><li>Save the order</li></ol><p>You type the values yourself; the tour shows you where.</p>"
 		},
 		{
 			"id": "order-type",
