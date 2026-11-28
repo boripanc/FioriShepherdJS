@@ -19,15 +19,24 @@ sap.ui.define([
 	"./lib/SeenStore",
 	"./lib/Text",
 	"./lib/DraftStore",
+	"./lib/TourStore",
 	"./lib/TourSession",
-	"./lib/AppMatch"
-], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourSession, AppMatch) {
+	"./lib/AppMatch",
+	"./lib/StartPage"
+], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourStore, TourSession, AppMatch, StartPage) {
 	"use strict";
 
 	var LOG_COMPONENT = "fiori.shepherd.guide";
 	var HEADER_BUTTON_ID = "fioriShepherdGuideHeaderButton";
-	var EDITOR_BUTTON_ID = "fioriShepherdGuideEditorButton";
+	var EDITOR_ENTRY_ID = "fioriShepherdGuideEditorEntry";
 	var EVENT_CHANNEL = "fiori.shepherd.guide";
+
+	/** What is kept of a tour to go on later (catalog entries may carry more). */
+	function sessionDef(oDef) {
+		var oSaved = Object.assign({}, oDef);
+		delete oSaved.isDraft;
+		return oSaved;
+	}
 
 	function getContainer() {
 		return sap.ui.require("sap/ushell/Container") || (window.sap && sap.ushell && sap.ushell.Container);
@@ -45,27 +54,30 @@ sap.ui.define([
 
 			this._oConfig = this._readConfig();
 			this._oBundle = this.getModel("i18n").getResourceBundle();
-			this._oRegistry = new TourRegistry(this._oConfig.toursUrl);
+			this._oStore = new TourStore(this._oConfig.toursApiUrl);
+			this._oRegistry = new TourRegistry(this._oConfig.toursUrl, this._oStore);
 			this._oRunner = new TourRunner({ bundle: this._oBundle });
 			this._aCurrentTours = [];
+			this._aAllTours = [];
 			this._iContextSeq = 0;
-
-			this._bEditorEnabled = this._isEditorEnabled();
-			if (this._bEditorEnabled) {
-				// the author sees their unpublished drafts like normal tours
-				this._oRegistry.setOverlay(DraftStore.list);
-			}
 
 			this._oHeaderItemReady = this._oConfig.showHeaderButton
 				? this._createHeaderButton().catch(function (oError) {
 					Log.error("Could not create the guided tour header button", oError, LOG_COMPONENT);
 				})
 				: Promise.resolve();
-			if (this._bEditorEnabled) {
-				this._createEditorButton().catch(function (oError) {
-					Log.error("Could not create the tour editor header button", oError, LOG_COMPONENT);
-				});
-			}
+
+			// the editor is an entry in the Guided Tour menu, for the users allowed to edit
+			this._bEditorEnabled = false;
+			this._oEditorReady = this._isEditorEnabled().then(function (bEnabled) {
+				this._bEditorEnabled = bEnabled;
+				if (bEnabled) {
+					// the author sees their unpublished drafts like normal tours
+					this._oRegistry.setOverlay(DraftStore.list);
+					this._refreshContext();
+				}
+				return bEnabled;
+			}.bind(this));
 
 			this._onHashChange = this._refreshContext.bind(this);
 			window.addEventListener("hashchange", this._onHashChange);
@@ -201,34 +213,99 @@ sap.ui.define([
 			if (!this._fnShowButton) {
 				return;
 			}
-			if (this._aCurrentTours.length > 0 || this._getPausedTour() || !this._oConfig.hideButtonWithoutTours) {
+			if (this._aCurrentTours.length > 0 || this._getPausedTour() || this._otherTours().length > 0
+				|| this._bEditorEnabled || !this._oConfig.hideButtonWithoutTours) {
 				this._fnShowButton();
 			} else {
 				this._fnHideButton();
 			}
 		},
 
+		/**
+		 * Guides that can be started from anywhere but don't belong to this page ("All guides").
+		 * Config showAllTours: false turns the list off; a tour with listed: false is never in it.
+		 */
+		_otherTours: function () {
+			if (this._oConfig.showAllTours === false) {
+				return [];
+			}
+			var mHere = {};
+			this._aCurrentTours.forEach(function (oTour) {
+				mHere[oTour.id] = true;
+			});
+			return this._aAllTours.filter(function (oTour) {
+				// only guides the plugin can take the user to (a start page, or an intent without wildcards)
+				return !mHere[oTour.id] && oTour.listed !== false && !!(oTour.start || AppMatch.hashOf(oTour));
+			});
+		},
+
 		_onHeaderButtonPress: function (oEvent) {
 			var aTours = this._aCurrentTours;
 			var oPaused = this._getPausedTour();
-			if (oPaused) {
-				this._openTourChooser(oEvent.getSource(), aTours, oPaused);
-				return;
-			}
-			if (aTours.length === 0) {
-				sap.ui.require(["sap/m/MessageToast"], function (MessageToast) {
-					MessageToast.show(this._oBundle.getText("noTours"));
-				}.bind(this));
+			var bOthers = this._otherTours().length > 0;
+			if (oPaused || aTours.length > 1 || (aTours.length === 1 && bOthers) || this._bEditorEnabled) {
+				this._openTourChooser(oEvent.getSource(), aTours, oPaused, bOthers);
 				return;
 			}
 			if (aTours.length === 1) {
 				this.startTour(aTours[0]);
 				return;
 			}
-			this._openTourChooser(oEvent.getSource(), aTours);
+			if (bOthers) {
+				this.openAllGuides();
+				return;
+			}
+			sap.ui.require(["sap/m/MessageToast"], function (MessageToast) {
+				MessageToast.show(this._oBundle.getText("noTours"));
+			}.bind(this));
 		},
 
-		_openTourChooser: function (oSource, aTours, oPaused) {
+		/** A searchable list of every guide; the chosen one takes the user to its start page. */
+		openAllGuides: function () {
+			var that = this;
+			sap.ui.require(["sap/m/SelectDialog", "sap/m/StandardListItem", "sap/ui/model/json/JSONModel",
+				"sap/ui/model/Filter", "sap/ui/model/FilterOperator"], function (SelectDialog, StandardListItem, JSONModel, Filter, FilterOperator) {
+				var aItems = that._aCurrentTours.concat(that._otherTours()).map(function (oTour) {
+					var sWhere = oTour.start ? StartPage.splitHash(StartPage.parse(oTour.start).hash).intent
+						: AppMatch.labelOf(oTour);
+					return {
+						id: oTour.id,
+						title: Text.resolve(oTour.title) || oTour.id,
+						description: sWhere ? that._oBundle.getText("startsIn", [sWhere]) : ""
+					};
+				});
+				if (that._oAllGuidesDialog) {
+					that._oAllGuidesDialog.destroy();
+				}
+				var fnSearch = function (oEvent) {
+					var sValue = oEvent.getParameter("value") || "";
+					oEvent.getSource().getBinding("items").filter(sValue ? [new Filter({
+						filters: [new Filter("title", FilterOperator.Contains, sValue), new Filter("description", FilterOperator.Contains, sValue)],
+						and: false
+					})] : []);
+				};
+				that._oAllGuidesDialog = new SelectDialog("fioriShepherdGuideAllGuidesDialog", {
+					title: that._oBundle.getText("allGuidesTitle"),
+					noDataText: that._oBundle.getText("noTours"),
+					items: {
+						path: "/items",
+						template: new StandardListItem({ title: "{title}", description: "{description}", icon: "sap-icon://learning-assistant", type: "Active" })
+					},
+					search: fnSearch,
+					liveChange: fnSearch,
+					confirm: function (oEvent) {
+						var oItem = oEvent.getParameter("selectedItem");
+						if (oItem) {
+							that.startTour(oItem.getBindingContext().getProperty("id"));
+						}
+					}
+				});
+				that._oAllGuidesDialog.setModel(new JSONModel({ items: aItems }));
+				that._oAllGuidesDialog.open();
+			});
+		},
+
+		_openTourChooser: function (oSource, aTours, oPaused, bOthers) {
 			var that = this;
 			sap.ui.require(["sap/m/ActionSheet", "sap/m/Button"], function (ActionSheet, Button) {
 				if (that._oActionSheet) {
@@ -262,6 +339,25 @@ sap.ui.define([
 						press: function () {
 							TourSession.clear();
 							that._updateButtonVisibility();
+						}
+					}));
+				}
+				if (bOthers) {
+					aButtons.push(new Button("fioriShepherdGuideAllGuides", {
+						text: that._oBundle.getText("allGuides"),
+						icon: "sap-icon://search",
+						press: function () {
+							that.openAllGuides();
+						}
+					}));
+				}
+				if (that._bEditorEnabled) {
+					var bOpen = !!(that._oEditor && that._oEditor.isOpen());
+					aButtons.push(new Button(EDITOR_ENTRY_ID, {
+						text: that._oBundle.getText(bOpen ? "editorClose" : "editorOpen"),
+						icon: bOpen ? "sap-icon://decline" : "sap-icon://edit",
+						press: function () {
+							that.openEditor();
 						}
 					}));
 				}
@@ -305,12 +401,14 @@ sap.ui.define([
 				this._oEditor.refreshContext();
 			}
 
-			this._oRegistry.findTours(oContext).then(function (aTours) {
+			Promise.all([this._oRegistry.findTours(oContext), this._oRegistry.loadAll()]).then(function (aResults) {
+				var aTours = aResults[0];
 				if (iSeq !== that._iContextSeq) {
 					return; // the user navigated on in the meantime
 				}
 				that._oContext = oContext;
 				that._aCurrentTours = aTours;
+				that._aAllTours = aResults[1];
 				that._oHeaderItemReady.then(that._updateButtonVisibility.bind(that));
 				// a tour the user is in the middle of goes first; never auto-start another one then
 				if (!that._maybeResume(oContext) && !that._getPausedTour()) {
@@ -342,6 +440,14 @@ sap.ui.define([
 			if (!oState) {
 				return false;
 			}
+			if (oState.pendingStart) {
+				// the guide was started elsewhere: begin once the user is on its start page
+				if (!StartPage.isAt(oState.def.start)) {
+					return false;
+				}
+				this._runTour(oState.def, { startAt: 0, resumed: true, preview: oState.preview });
+				return true;
+			}
 			var iIndex = TourRunner.resumeIndex(oState.def, oState.index, oContext);
 			if (iIndex < 0) {
 				return false;
@@ -361,6 +467,10 @@ sap.ui.define([
 				return;
 			}
 			if (this._maybeResume(this._currentContext())) {
+				return;
+			}
+			if (oState.def.start && (oState.pendingStart || oState.index === 0)) {
+				StartPage.go(oState.def.start); // the guide begins once its start page is open
 				return;
 			}
 			var oApp = TourRunner.stepApps(oState.def)[oState.index];
@@ -395,35 +505,34 @@ sap.ui.define([
 		/* ------------------------------------------------------------------ */
 
 		/**
-		 * enableEditor: true (always), false (never) or "url" (default): only when the
-		 * Launchpad URL contains fiori-guide-editor=true, e.g.
-		 * .../FioriLaunchpad.html?fiori-guide-editor=true#SalesOrder-manage
+		 * Who gets the editor entry in the Guided Tour menu:
+		 * enableEditor: true (default), false (never) or "url" (only with ?fiori-guide-editor=true
+		 * in the Launchpad URL). With true, editorUsers can limit it to some SAP user IDs
+		 * (comma-separated, case-insensitive); empty or "*" means every user.
 		 */
 		_isEditorEnabled: function () {
-			var vSetting = this._oConfig.enableEditor === undefined ? "url" : this._oConfig.enableEditor;
-			if (vSetting === true || vSetting === false) {
-				return vSetting;
+			var vSetting = this._oConfig.enableEditor === undefined ? true : this._oConfig.enableEditor;
+			if (vSetting === false) {
+				return Promise.resolve(false);
 			}
-			try {
-				return new URLSearchParams(window.location.search).get("fiori-guide-editor") === "true";
-			} catch (e) {
-				return false;
-			}
-		},
-
-		_createEditorButton: function () {
-			var that = this;
-			return this._createHeaderItem({
-				id: EDITOR_BUTTON_ID,
-				icon: "sap-icon://edit",
-				tooltip: this._oBundle.getText("editorButtonTooltip"),
-				text: this._oBundle.getText("editorButtonTooltip"),
-				ariaLabel: this._oBundle.getText("editorButtonTooltip"),
-				press: function () {
-					that.openEditor();
+			if (vSetting === "url") {
+				try {
+					return Promise.resolve(new URLSearchParams(window.location.search).get("fiori-guide-editor") === "true");
+				} catch (e) {
+					return Promise.resolve(false);
 				}
-			}).then(function (oItem) {
-				oItem.show();
+			}
+			var aUsers = String(this._oConfig.editorUsers || "").split(/[\s,;]+/).filter(Boolean).map(function (s) {
+				return s.toUpperCase();
+			});
+			if (aUsers.length === 0 || aUsers.indexOf("*") >= 0) {
+				return Promise.resolve(true);
+			}
+			return getContainer().getServiceAsync("UserInfo").then(function (oUserInfo) {
+				return aUsers.indexOf(String(oUserInfo.getId() || "").toUpperCase()) >= 0;
+			}).catch(function (oError) {
+				Log.warning("UserInfo service not available; tour editor off", oError, LOG_COMPONENT);
+				return false;
 			});
 		},
 
@@ -462,15 +571,69 @@ sap.ui.define([
 					});
 				},
 				previewTour: function (oDef) {
-					return that._runTour(oDef, { preview: true });
+					return that._startDef(oDef, { preview: true });
 				},
 				onDraftsChanged: function () {
 					that._refreshContext();
 					return Promise.resolve();
 				},
+				/** Whether tours can be published to the tour database (config toursApiUrl). */
+				isDatabaseEnabled: function () {
+					return that._oStore.isEnabled();
+				},
+				/** Saves the tour in the database for all users and drops the local draft. */
+				publishTour: function (oDef) {
+					return that._oStore.save(oDef, that._getUserId()).then(function (oResult) {
+						DraftStore.remove(oDef.id);
+						that._oRegistry.reload();
+						that._refreshContext();
+						return oResult;
+					});
+				},
+				/** Removes the tour from the database (a tour in index.json shows again). */
+				unpublishTour: function (sId) {
+					return that._oStore.remove(sId, that._getUserId()).then(function (oResult) {
+						that._oRegistry.reload();
+						that._refreshContext();
+						return oResult;
+					});
+				},
+				/** Ids of the tours in the tour database. */
+				getDatabaseIds: function () {
+					return that._oRegistry.loadIndex().then(function (aTours) {
+						return aTours.filter(function (oTour) {
+							return oTour.source === "db";
+						}).map(function (oTour) {
+							return oTour.id;
+						});
+					});
+				},
+				getPublishKey: function () {
+					return TourStore.getKey();
+				},
+				setPublishKey: function (sKey) {
+					TourStore.setKey(sKey);
+				},
 				/** Catalog file content with the drafts merged in (drafts carry their steps inline). */
 				buildExportCatalog: function () {
-					return that._oRegistry.loadIndex().then(function (aCatalog) {
+					return that._oRegistry.loadIndex().then(function (aIndex) {
+						// database tours go into the file with their steps, so the export is complete
+						return Promise.all(aIndex.map(function (oTour) {
+							if (oTour.source !== "db") {
+								return oTour;
+							}
+							return that._oRegistry.loadTour(oTour).then(function (oFull) {
+								var oOut = Object.assign({}, oFull);
+								delete oOut.source;
+								delete oOut.updatedAt;
+								delete oOut.updatedBy;
+								return oOut;
+							}, function () {
+								return null;
+							});
+						}));
+					}).then(function (aLoaded) {
+						var aCatalog = aLoaded.filter(Boolean);
 						var aDrafts = DraftStore.list();
 						var mDrafts = {};
 						aDrafts.forEach(function (oDraft) {
@@ -492,6 +655,16 @@ sap.ui.define([
 			};
 		},
 
+		_getUserId: function () {
+			try {
+				var oContainer = getContainer();
+				var oUser = oContainer && oContainer.getUser && oContainer.getUser();
+				return (oUser && oUser.getId && oUser.getId()) || "";
+			} catch (e) {
+				return "";
+			}
+		},
+
 		/* ------------------------------------------------------------------ */
 		/* Public API                                                          */
 		/* ------------------------------------------------------------------ */
@@ -510,7 +683,7 @@ sap.ui.define([
 				}
 				return that._oRegistry.loadTour(oEntry);
 			}).then(function (oTour) {
-				return that._runTour(oTour, {});
+				return that._startDef(oTour, {});
 			}).catch(function (oError) {
 				Log.error("Could not start guided tour", oError, LOG_COMPONENT);
 			});
@@ -523,12 +696,24 @@ sap.ui.define([
 		 * @param {{startAt: number, resumed: boolean, preview: boolean}} mOptions preview: an
 		 *        editor preview, which does not count as "seen"
 		 */
+		/**
+		 * Starts a guide from wherever the user is: when it has a start page and the user is
+		 * somewhere else, it takes the user there first and the guide begins once that page is open.
+		 */
+		_startDef: function (oDef, mOptions) {
+			if (oDef.start && !StartPage.isAt(oDef.start)) {
+				TourSession.save({ def: sessionDef(oDef), index: 0, preview: !!mOptions.preview, pendingStart: true });
+				this._updateButtonVisibility();
+				StartPage.go(oDef.start);
+				return Promise.resolve(null);
+			}
+			return this._runTour(oDef, mOptions);
+		},
+
 		_runTour: function (oDef, mOptions) {
 			var that = this;
 			var bPreview = !!mOptions.preview;
-			// keep only what is needed to go on later (catalog entries may carry more)
-			var oSaved = Object.assign({}, oDef);
-			delete oSaved.isDraft;
+			var oSaved = sessionDef(oDef);
 			var fnSave = function (iIndex) {
 				TourSession.save({ def: oSaved, index: iIndex, preview: bPreview });
 			};
@@ -539,9 +724,13 @@ sap.ui.define([
 				onStep: fnSave,
 				onPause: function (iIndex, oApp, bNavigate) {
 					fnSave(iIndex);
-					var sHash = bNavigate ? AppMatch.hashOf(oApp) : "";
-					if (sHash) {
-						window.location.hash = sHash; // "Next" into another app opens that app
+					if (bNavigate && iIndex === 0 && oDef.start) {
+						StartPage.go(oDef.start);
+					} else {
+						var sHash = bNavigate ? AppMatch.hashOf(oApp) : "";
+						if (sHash) {
+							window.location.hash = sHash; // "Next" into another app opens that app
+						}
 					}
 					setTimeout(that._updateButtonVisibility.bind(that), 0);
 				},

@@ -1,5 +1,6 @@
 // End-to-end test of the point-and-click tour editor in the Launchpad sandbox.
 // Start the dev server first (npm run serve), then: node scripts/editor-test.mjs
+import { toggleEditor } from "./editor-menu.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 
@@ -32,11 +33,11 @@ try {
 		localStorage.setItem("fiori.shepherd.guide.seen.salesorder-overview", "1");
 	});
 	await page.goto(BASE + "#SalesOrder-manage");
-	await page.waitForSelector("#fioriShepherdGuideEditorButton", { timeout: 60000 });
+	await page.waitForSelector("#fioriShepherdGuideHeaderButton", { timeout: 60000 });
 	check(true, "Editor button is in the shell header when ?fiori-guide-editor=true");
 	await page.waitForSelector("[id$='--ordersTable']", { timeout: 30000 });
 
-	await page.click("#fioriShepherdGuideEditorButton");
+	await toggleEditor(page);
 	await page.waitForSelector("#fioriGuideEditor .sapMPage", { timeout: 20000 });
 	await page.waitForTimeout(800);
 	check(true, "Editor panel opens");
@@ -137,7 +138,7 @@ try {
 	await page.click(".sapMDialog button:has-text('Close')");
 
 	// the draft is now offered by the Guided Tour button
-	await page.click("#fioriShepherdGuideEditorButton"); // close editor
+	await toggleEditor(page); // close editor
 	await page.click("#fioriShepherdGuideHeaderButton");
 	await page.waitForSelector(".sapMActionSheet", { timeout: 10000 });
 	check(await page.locator(".sapMActionSheet .sapMBtn:has-text('Filter orders by status')").count() === 1, "Draft appears in the Guided Tour list");
@@ -145,13 +146,13 @@ try {
 
 	// editing an existing tour: open it and check the steps are loaded
 	await page.keyboard.press("Escape");
-	await page.click("#fioriShepherdGuideEditorButton");
+	await toggleEditor(page);
 	await page.click("#fioriGuideEditor .sapMSlt");
 	await page.click(".sapMSelectList li:has-text('Find and create sales orders')");
 	await page.waitForTimeout(800);
 	check(await page.locator("#fioriGuideEditor .sapMList .sapMLIB").count() === 6, "Existing tour opens with its 6 steps");
 	await shot("8-edit-existing");
-	await page.click("#fioriShepherdGuideEditorButton"); // close editor
+	await toggleEditor(page); // close editor
 
 	// ---- transaction code steps in SAP GUI for HTML (mock screen in an iframe) ----
 	await page.evaluate(() => localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "2"));
@@ -159,7 +160,7 @@ try {
 	const gui = page.frameLocator("iframe");
 	await gui.locator("#ToolbarOkCode").waitFor({ timeout: 30000 });
 	await page.waitForTimeout(1500);
-	await page.click("#fioriShepherdGuideEditorButton");
+	await toggleEditor(page);
 	await page.waitForTimeout(1000);
 	await page.click("#fioriGuideEditor .sapMSlt");
 	await page.click(".sapMSelectList li:has-text('+ New tour')");

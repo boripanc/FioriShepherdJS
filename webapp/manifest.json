@@ -43,10 +43,14 @@
     "config": {
       "fioriGuide": {
         "toursUrl": "",
+        "toursApiUrl": "https://n8n.teddybiere.info/webhook/fiori-guide",
         "autoStart": true,
         "showHeaderButton": true,
         "hideButtonWithoutTours": true,
-        "resumeMinutes": 30
+        "showAllTours": true,
+        "resumeMinutes": 30,
+        "enableEditor": true,
+        "editorUsers": ""
       }
     }
   },

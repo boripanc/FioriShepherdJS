@@ -1,5 +1,6 @@
 // Tour editor: recording one tour across two apps (Launchpad home -> Manage Sales Orders).
 // Start the dev server first (npm run serve), then: npm test
+import { toggleEditor } from "./editor-menu.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 
@@ -37,9 +38,9 @@ try {
 		localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "2");
 	});
 	await page.reload();
-	await page.waitForSelector("#fioriShepherdGuideEditorButton", { timeout: 60000 });
+	await page.waitForSelector("#fioriShepherdGuideHeaderButton", { timeout: 60000 });
 	await page.waitForTimeout(1500);
-	await page.click("#fioriShepherdGuideEditorButton");
+	await toggleEditor(page);
 	await page.waitForSelector("#fioriGuideEditor .sapMPage", { timeout: 20000 });
 	await page.waitForTimeout(800);
 

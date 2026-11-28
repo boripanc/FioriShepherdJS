@@ -44,6 +44,7 @@ sap.ui.define([], function () {
 				action: sAction,
 				appId: bHome ? "" : getAppId(oAppLifeCycle),
 				innerHash: sInner,
+				hash: sHash || "",
 				isHome: bHome
 			};
 		}
