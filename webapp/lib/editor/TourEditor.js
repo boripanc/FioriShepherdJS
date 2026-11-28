@@ -68,15 +68,49 @@ sap.ui.define([
 		return sPrefix ? "^" + escapeRegex(sPrefix) : "^$";
 	}
 
-	/** How the user moves on from a step: next | click | auto (the guide clicks) | typeEnter | type */
-	function advanceOf(oStep) {
+	/**
+	 * One kind of step: who does it (the user or the guide), an optional value to type, and what
+	 * happens then (nothing, Enter, a click on the element). Read from the step JSON fields
+	 * (expectValue / tcode / advanceOn / fillValue / pressEnter / autoClick).
+	 */
+	function actionOf(oStep) {
+		var sFill = oStep.fillValue === undefined || oStep.fillValue === null ? "" : Text.resolve(oStep.fillValue);
 		if (oStep.autoClick === true) {
-			return "auto";
+			return { doer: "guide", value: sFill, then: "click" };
 		}
-		if (oStep.tcode || (oStep.expectValue !== undefined && oStep.expectValue !== "")) {
-			return oStep.advanceOn === "input" ? "type" : "typeEnter";
+		if (sFill !== "") {
+			return { doer: "guide", value: sFill, then: oStep.pressEnter === true ? "enter" : "none" };
 		}
-		return oStep.advanceOn === "click" ? "click" : "next";
+		var sExpect = oStep.tcode && typeof oStep.tcode === "string" ? oStep.tcode
+			: Array.isArray(oStep.expectValue) ? oStep.expectValue.join(", ") : oStep.expectValue || "";
+		if (oStep.tcode || sExpect !== "") {
+			return { doer: "user", value: sExpect, then: oStep.advanceOn === "input" ? "none" : "enter" };
+		}
+		return { doer: "user", value: "", then: oStep.advanceOn === "click" ? "click" : "none" };
+	}
+
+	/** Fields of a new step; the SAP GUI command field starts as "the user types the T-code and presses Enter". */
+	function newStepFields(oTarget) {
+		var bOkCode = !!(oTarget && oTarget.webgui === "okcode");
+		return { position: bOkCode ? "bottom-start" : "bottom", doer: "user", value: "", then: bOkCode ? "enter" : "none",
+			tcode: bOkCode, followUser: true };
+	}
+
+	/** Which "the step continues when ..." sentence the editor shows. */
+	function continuesKey(sQuality, sDoer, sValue, sThen, bFollow) {
+		if (sQuality === "none" || (sDoer === "user" && sThen === "none" && !sValue)) {
+			return bFollow === false ? "next" : "nextOrApp";
+		}
+		if (sDoer === "guide") {
+			if (sThen === "click") {
+				return "guideClick";
+			}
+			return sThen === "enter" ? (sValue ? "guideEnter" : "needValue") : sValue ? "guideFill" : "nextOrApp";
+		}
+		if (sThen === "click") {
+			return "userClick";
+		}
+		return sThen === "enter" ? (sValue ? "userEnter" : "needValue") : "userType";
 	}
 
 	function TourEditor(oPlugin) {
@@ -286,13 +320,9 @@ sap.ui.define([
 						titleI18n: typeof oStep.title === "object" ? oStep.title : null,
 						textI18n: typeof oStep.text === "object" ? oStep.text : null,
 						position: oStep.position || "bottom",
-						advance: advanceOf(oStep),
-						expectValue: oStep.tcode && typeof oStep.tcode === "string" ? oStep.tcode
-							: Array.isArray(oStep.expectValue) ? oStep.expectValue.join(", ") : oStep.expectValue || "",
+					}, actionOf(oStep), {
 						tcode: !!oStep.tcode,
-						fillValue: oStep.fillValue === undefined || oStep.fillValue === null ? "" : Text.resolve(oStep.fillValue),
 						fillValueI18n: typeof oStep.fillValue === "object" ? oStep.fillValue : null,
-						pressEnter: oStep.pressEnter === true,
 						followUser: oStep.followUser !== false,
 						targetLabel: oStep.target ? that._describeTarget(oStep.target) : that.t("editor.noTarget"),
 						quality: oStep.target ? (oFound ? "found" : "missing") : "none"
@@ -373,17 +403,20 @@ sap.ui.define([
 									]
 								}).addStyleClass("fioriGuideEditorStepText"),
 								new Icon({
-									src: { parts: ["quality", "advance"], formatter: function (sQuality, sAdvance) {
+									src: { parts: ["quality", "doer", "value", "then"], formatter: function (sQuality, sDoer, sValue, sThen) {
 										if (sQuality === "missing" || sQuality === "fragile") {
 											return "sap-icon://message-warning";
 										}
 										if (sQuality === "otherApp") {
 											return "sap-icon://chain-link";
 										}
-										if (sAdvance === "typeEnter" || sAdvance === "type") {
+										if (sDoer === "guide") {
+											return "sap-icon://play";
+										}
+										if (sValue) {
 											return "sap-icon://keyboard-and-mouse";
 										}
-										return sAdvance === "click" ? "sap-icon://touch" : "";
+										return sThen === "click" ? "sap-icon://touch" : "";
 									} },
 									color: { path: "quality", formatter: function (sQuality) {
 										return sQuality === "missing" || sQuality === "fragile" ? "Critical" : "Default";
@@ -450,44 +483,49 @@ sap.ui.define([
 					change: this._markDirty.bind(this),
 					items: { path: "/positions", template: new Item({ key: "{key}", text: "{text}" }), templateShareable: false }
 				}),
-				new Label({ text: this.t("editor.advance"), visible: "{= ${quality} !== 'none' }" }),
-				new Select("fioriGuideEditorAdvance", {
+				new Label({ text: this.t("editor.doer"), visible: "{= ${quality} !== 'none' }" }),
+				new Select("fioriGuideEditorDoer", {
 					width: "100%",
 					visible: "{= ${quality} !== 'none' }",
-					selectedKey: "{advance}",
+					selectedKey: "{doer}",
 					change: this._markDirty.bind(this),
 					items: [
-						new Item({ key: "next", text: this.t("editor.advance.next") }),
-						new Item({ key: "click", text: this.t("editor.advance.click") }),
-						new Item({ key: "auto", text: this.t("editor.advance.auto") }),
-						new Item({ key: "typeEnter", text: this.t("editor.advance.typeEnter") }),
-						new Item({ key: "type", text: this.t("editor.advance.type") })
+						new Item({ key: "user", text: this.t("editor.doer.user") }),
+						new Item({ key: "guide", text: this.t("editor.doer.guide") })
 					]
 				}),
-				new Label({ text: this.t("editor.expectValue"), required: true, visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }" }),
-				new Input("fioriGuideEditorExpectValue", {
-					value: "{expectValue}",
+				new Label({ text: { path: "doer", formatter: function (sDoer) {
+					return that.t(sDoer === "guide" ? "editor.valueGuide" : "editor.valueUser");
+				} }, wrapping: true, visible: "{= ${quality} !== 'none' && !(${doer} === 'user' && ${then} === 'click') }" }),
+				new Input("fioriGuideEditorValue", {
+					value: "{value}",
 					valueLiveUpdate: true,
-					placeholder: this.t("editor.expectValuePlaceholder"),
-					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
+					placeholder: this.t("editor.valuePlaceholder"),
+					visible: "{= ${quality} !== 'none' && !(${doer} === 'user' && ${then} === 'click') }",
 					liveChange: this._markDirty.bind(this)
 				}),
-				new CheckBox({ wrapping: true, text: this.t("editor.tcode"), selected: "{tcode}",
-					visible: "{= ${quality} !== 'none' && (${advance} === 'typeEnter' || ${advance} === 'type') }",
+				new CheckBox("fioriGuideEditorTcode", { wrapping: true, text: this.t("editor.tcode"), selected: "{tcode}",
+					visible: "{= ${quality} !== 'none' && ${doer} === 'user' && !!${value} && ${then} !== 'click' }",
 					select: this._markDirty.bind(this) }),
-				new Label({ text: this.t("editor.fillValue"), visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }" }),
-				new Input("fioriGuideEditorFillValue", {
-					value: "{fillValue}",
-					valueLiveUpdate: true,
-					placeholder: this.t("editor.fillValuePlaceholder"),
-					visible: "{= ${quality} !== 'none' && ${advance} !== 'typeEnter' && ${advance} !== 'type' }",
-					liveChange: this._markDirty.bind(this)
+				new Label({ text: this.t("editor.then"), visible: "{= ${quality} !== 'none' }" }),
+				new Select("fioriGuideEditorThen", {
+					width: "100%",
+					visible: "{= ${quality} !== 'none' }",
+					selectedKey: "{then}",
+					change: this._markDirty.bind(this),
+					items: [
+						new Item({ key: "none", text: this.t("editor.then.none") }),
+						new Item({ key: "enter", text: this.t("editor.then.enter") }),
+						new Item({ key: "click", text: this.t("editor.then.click") })
+					]
 				}),
-				new CheckBox("fioriGuideEditorPressEnter", { wrapping: true, text: this.t("editor.pressEnter"), selected: "{pressEnter}",
-					visible: "{= ${quality} !== 'none' && (${advance} === 'next' || ${advance} === 'click') && !!${fillValue} }",
-					select: this._markDirty.bind(this) }),
+				new MText("fioriGuideEditorContinues", {
+					text: { parts: ["quality", "doer", "value", "then", "followUser"], formatter: function (sQuality, sDoer, sValue, sThen, bFollow) {
+						return that.t("editor.continues." + continuesKey(sQuality, sDoer, sValue, sThen, bFollow));
+					} }
+				}).addStyleClass("fioriGuideEditorContinues sapUiTinyMarginTop"),
 				new CheckBox("fioriGuideEditorFollowUser", { wrapping: true, text: this.t("editor.followUser"), selected: "{followUser}",
-					visible: "{= ${advance} === 'next' && !${fillValue} }",
+					visible: "{= ${quality} === 'none' || (${doer} === 'user' && ${then} === 'none' && !${value}) }",
 					select: this._markDirty.bind(this) })
 			]
 		}).addStyleClass("fioriGuideEditorStepForm");
@@ -542,8 +580,7 @@ sap.ui.define([
 							wrap: "Wrap",
 							items: [
 								new Button("fioriGuideEditorAddStep", { text: this.t("editor.addStep"), icon: "sap-icon://touch", type: "Emphasized", press: this._addStepByPicking.bind(this) }).addStyleClass("sapUiTinyMarginEnd"),
-								new Button("fioriGuideEditorAddMessage", { text: this.t("editor.addMessage"), icon: "sap-icon://message-popup", press: this._addMessageStep.bind(this) }).addStyleClass("sapUiTinyMarginEnd"),
-								new Button("fioriGuideEditorAddTcode", { text: this.t("editor.addTcode"), icon: "sap-icon://keyboard-and-mouse", press: this._addTcodeStep.bind(this) })
+								new Button("fioriGuideEditorAddMessage", { text: this.t("editor.addMessage"), icon: "sap-icon://message-popup", press: this._addMessageStep.bind(this) })
 							]
 						}),
 						this._oStepList,
@@ -659,7 +696,11 @@ sap.ui.define([
 			if (!oPick) {
 				return;
 			}
-			that._appendStep(Object.assign({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, followUser: true }, that._fromPick(oPick)));
+			var bOkCode = !!(oPick.target && oPick.target.webgui === "okcode");
+			that._appendStep(Object.assign({
+				title: bOkCode ? that.t("editor.tcodeDefaultTitle") : "",
+				text: bOkCode ? that.t("editor.tcodeDefaultText") : ""
+			}, newStepFields(oPick.target), that._fromPick(oPick)));
 			that._focusStepTitle();
 			if (oPick.quality === "fragile") {
 				MessageToast.show(that.t("editor.fragileHint"), { duration: 6000 });
@@ -668,45 +709,8 @@ sap.ui.define([
 	};
 
 	TourEditor.prototype._addMessageStep = function () {
-		this._appendStep({ title: "", text: "", position: "bottom", advance: "next", expectValue: "", tcode: false, fillValue: "", pressEnter: false, followUser: true, target: null, targetLabel: this.t("editor.noTarget"), quality: "none" });
+		this._appendStep(Object.assign({ title: "", text: "" }, newStepFields(null), { target: null, targetLabel: this.t("editor.noTarget"), quality: "none" }));
 		this._focusStepTitle();
-	};
-
-	/**
-	 * A "type the transaction code" step. Uses the SAP GUI command field when a SAP GUI
-	 * screen is open; otherwise the author clicks the field (e.g. the Launchpad search).
-	 */
-	TourEditor.prototype._addTcodeStep = function () {
-		var that = this;
-		var oOkCode = TargetResolver.resolve({ webgui: "okcode" });
-		var pPick;
-		if (oOkCode) {
-			pPick = Promise.resolve({ target: { webgui: "okcode" }, element: oOkCode, label: this.t("editor.okcodeLabel"), quality: "stable" });
-		} else {
-			MessageToast.show(this.t("editor.tcodePickHint"), { duration: 5000 });
-			pPick = this._pick();
-		}
-		pPick.then(function (oPick) {
-			if (!oPick) {
-				return;
-			}
-			that._appendStep(Object.assign({
-				title: that.t("editor.tcodeDefaultTitle"),
-				text: that.t("editor.tcodeDefaultText"),
-				position: "bottom-start",
-				advance: "typeEnter",
-				expectValue: "",
-				tcode: true,
-				fillValue: "",
-				pressEnter: false
-			}, that._fromPick(oPick)));
-			setTimeout(function () {
-				var oInput = sap.ui.getCore().byId("fioriGuideEditorExpectValue");
-				if (oInput) {
-					oInput.focus();
-				}
-			}, 150);
-		});
 	};
 
 	TourEditor.prototype._focusStepTitle = function () {
@@ -852,30 +856,32 @@ sap.ui.define([
 			if (oStep.target) {
 				oOut.target = oStep.target;
 				oOut.position = oStep.position || "bottom";
-				if (oStep.advance === "click") {
+				var sValue = String(oStep.value || "");
+				if (oStep.doer === "guide") {
+					if (sValue !== "") {
+						oOut.fillValue = i18nValue(oStep.fillValueI18n, sValue);
+						if (oStep.then === "enter") {
+							oOut.pressEnter = true;
+						}
+					}
+					if (oStep.then === "click") {
+						oOut.autoClick = true;
+					}
+				} else if (oStep.then === "click") {
 					oOut.advanceOn = "click";
-				} else if (oStep.advance === "auto") {
-					oOut.autoClick = true;
-				} else if ((oStep.advance === "typeEnter" || oStep.advance === "type") && String(oStep.expectValue || "").trim()) {
-					var aValues = String(oStep.expectValue).split(",").map(function (sValue) {
-						return sValue.trim();
+				} else if (sValue.trim()) {
+					var aValues = sValue.split(",").map(function (s) {
+						return s.trim();
 					}).filter(Boolean);
 					oOut.expectValue = aValues.length === 1 ? aValues[0] : aValues;
-					oOut.advanceOn = oStep.advance === "type" ? "input" : "enter";
+					oOut.advanceOn = oStep.then === "enter" ? "enter" : "input";
 					if (oStep.tcode) {
 						oOut.tcode = true;
 					}
 				}
-				// a value the guide types in for the user (not on "the user types" steps)
-				if (oStep.advance !== "typeEnter" && oStep.advance !== "type" && String(oStep.fillValue || "") !== "") {
-					oOut.fillValue = i18nValue(oStep.fillValueI18n, oStep.fillValue);
-					if (oStep.pressEnter && oStep.advance !== "auto") {
-						oOut.pressEnter = true;
-					}
-				}
 			}
 			// "follow the user" is on by default for Next steps; only the opt-out is stored
-			if (oStep.followUser === false && (oStep.advance || "next") === "next" && !oOut.fillValue) {
+			if (oStep.followUser === false && !oOut.advanceOn && !oOut.fillValue && !oOut.autoClick) {
 				oOut.followUser = false;
 			}
 			["waitFor", "skipIfMissing", "canClickTarget", "classes", "showNext", "expectHint", "blockWrongValue", "actionDelay"].forEach(function (sKey) {
@@ -905,7 +911,7 @@ sap.ui.define([
 			return false;
 		}
 		var iMissing = (oTour.steps || []).findIndex(function (oStep) {
-			return (oStep.advance === "typeEnter" || oStep.advance === "type") && !String(oStep.expectValue || "").trim();
+			return oStep.target && oStep.then === "enter" && !String(oStep.value || "").trim();
 		});
 		if (iMissing >= 0) {
 			this._showStep(iMissing);
