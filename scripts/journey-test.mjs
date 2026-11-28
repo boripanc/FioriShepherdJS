@@ -1,4 +1,4 @@
-// A tour that goes across apps and survives a page reload (tours/order-journey.json).
+// A tour that goes across apps and survives a page reload (test/tours/order-journey.json).
 // Start the dev server first (npm run serve), then: npm test
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";

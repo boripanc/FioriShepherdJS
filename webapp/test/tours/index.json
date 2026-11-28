@@ -1,0 +1,77 @@
+{
+	"$comment": "Tour catalog. Each entry says which app a tour belongs to (intent and/or appId). See README.md for every field.",
+	"tours": [
+		{
+			"id": "launchpad-welcome",
+			"title": {
+				"en": "Welcome to the Launchpad",
+				"de": "Willkommen im Launchpad"
+			},
+			"intent": [
+				"Shell-home",
+				"Launchpad-openFLPPage"
+			],
+			"autoStart": false,
+			"version": 1,
+			"url": "launchpad-welcome.json"
+		},
+		{
+			"id": "order-journey",
+			"title": {
+				"en": "From the Launchpad to a sales order in SAP GUI"
+			},
+			"intent": [
+				"Shell-home",
+				"Launchpad-openFLPPage"
+			],
+			"autoStart": false,
+			"version": 1,
+			"url": "order-journey.json"
+		},
+		{
+			"id": "salesorder-overview",
+			"title": {
+				"en": "Find and create sales orders",
+				"de": "Kundenauftr\u00e4ge suchen und anlegen"
+			},
+			"intent": "SalesOrder-manage",
+			"innerHash": "^$|^orders",
+			"version": 1,
+			"url": "salesorder-overview.json"
+		},
+		{
+			"id": "salesorder-filters",
+			"title": "Filter the order list",
+			"appId": "fiori.shepherd.guide.demo",
+			"autoStart": false,
+			"steps": [
+				{
+					"title": "Search",
+					"text": "Type a customer name or order number here and press Enter.",
+					"target": {
+						"controlId": "searchField"
+					},
+					"position": "bottom"
+				},
+				{
+					"title": "Status filter",
+					"text": "Narrow the list down to open, in-process or completed orders.",
+					"target": {
+						"controlId": "statusFilter"
+					},
+					"position": "bottom"
+				}
+			]
+		},
+		{
+			"id": "sales-order-gui",
+			"title": {
+				"en": "Create a sales order in SAP GUI"
+			},
+			"intent": "Shell-startGUI",
+			"start": "#Shell-startGUI?sap-ui2-tcode=VA01",
+			"version": 2,
+			"url": "sales-order-gui.json"
+		}
+	]
+}
