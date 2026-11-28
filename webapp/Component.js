@@ -19,9 +19,10 @@ sap.ui.define([
 	"./lib/SeenStore",
 	"./lib/Text",
 	"./lib/DraftStore",
+	"./lib/TourStore",
 	"./lib/TourSession",
 	"./lib/AppMatch"
-], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourSession, AppMatch) {
+], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourStore, TourSession, AppMatch) {
 	"use strict";
 
 	var LOG_COMPONENT = "fiori.shepherd.guide";
@@ -45,7 +46,8 @@ sap.ui.define([
 
 			this._oConfig = this._readConfig();
 			this._oBundle = this.getModel("i18n").getResourceBundle();
-			this._oRegistry = new TourRegistry(this._oConfig.toursUrl);
+			this._oStore = new TourStore(this._oConfig.toursApiUrl);
+			this._oRegistry = new TourRegistry(this._oConfig.toursUrl, this._oStore);
 			this._oRunner = new TourRunner({ bundle: this._oBundle });
 			this._aCurrentTours = [];
 			this._iContextSeq = 0;
@@ -468,9 +470,63 @@ sap.ui.define([
 					that._refreshContext();
 					return Promise.resolve();
 				},
+				/** Whether tours can be published to the tour database (config toursApiUrl). */
+				isDatabaseEnabled: function () {
+					return that._oStore.isEnabled();
+				},
+				/** Saves the tour in the database for all users and drops the local draft. */
+				publishTour: function (oDef) {
+					return that._oStore.save(oDef, that._getUserId()).then(function (oResult) {
+						DraftStore.remove(oDef.id);
+						that._oRegistry.reload();
+						that._refreshContext();
+						return oResult;
+					});
+				},
+				/** Removes the tour from the database (a tour in index.json shows again). */
+				unpublishTour: function (sId) {
+					return that._oStore.remove(sId, that._getUserId()).then(function (oResult) {
+						that._oRegistry.reload();
+						that._refreshContext();
+						return oResult;
+					});
+				},
+				/** Ids of the tours in the tour database. */
+				getDatabaseIds: function () {
+					return that._oRegistry.loadIndex().then(function (aTours) {
+						return aTours.filter(function (oTour) {
+							return oTour.source === "db";
+						}).map(function (oTour) {
+							return oTour.id;
+						});
+					});
+				},
+				getPublishKey: function () {
+					return TourStore.getKey();
+				},
+				setPublishKey: function (sKey) {
+					TourStore.setKey(sKey);
+				},
 				/** Catalog file content with the drafts merged in (drafts carry their steps inline). */
 				buildExportCatalog: function () {
-					return that._oRegistry.loadIndex().then(function (aCatalog) {
+					return that._oRegistry.loadIndex().then(function (aIndex) {
+						// database tours go into the file with their steps, so the export is complete
+						return Promise.all(aIndex.map(function (oTour) {
+							if (oTour.source !== "db") {
+								return oTour;
+							}
+							return that._oRegistry.loadTour(oTour).then(function (oFull) {
+								var oOut = Object.assign({}, oFull);
+								delete oOut.source;
+								delete oOut.updatedAt;
+								delete oOut.updatedBy;
+								return oOut;
+							}, function () {
+								return null;
+							});
+						}));
+					}).then(function (aLoaded) {
+						var aCatalog = aLoaded.filter(Boolean);
 						var aDrafts = DraftStore.list();
 						var mDrafts = {};
 						aDrafts.forEach(function (oDraft) {
@@ -490,6 +546,16 @@ sap.ui.define([
 					});
 				}
 			};
+		},
+
+		_getUserId: function () {
+			try {
+				var oContainer = getContainer();
+				var oUser = oContainer && oContainer.getUser && oContainer.getUser();
+				return (oUser && oUser.getId && oUser.getId()) || "";
+			} catch (e) {
+				return "";
+			}
 		},
 
 		/* ------------------------------------------------------------------ */
