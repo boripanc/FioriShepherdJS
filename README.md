@@ -23,6 +23,215 @@ powered by [ShepherdJS](https://github.com/shepherd-pro/shepherd).
 
 ![Tour step highlighting the Create button](docs/create-step.png)
 
+**Setting it up in your Launchpad?** Follow [Install in your SAP Fiori Launchpad](#install-in-your-sap-fiori-launchpad).
+
+## Install in your SAP Fiori Launchpad
+
+This is the full setup on an on-premise SAP S/4HANA or ABAP front-end server (also RISE private edition), from
+the source code to users seeing the Guided Tour button. Plan about an hour the first time. You need a developer
+or basis user who may upload BSP applications, maintain Launchpad catalogs and change roles.
+
+**Overview**
+
+1. [Build the plugin](#1-build-the-plugin) on your PC.
+2. [Upload it as BSP application `ZFIORI_GUIDE`](#2-upload-the-bsp-application-zfiori_guide).
+3. [Register it as a Launchpad plugin](#3-register-the-plugin-in-the-launchpad) (catalog with a `Shell-plugin` target mapping).
+4. [Activate the plugin](#4-activate-the-plugin-sap_ui-753-and-newer) (SAP_UI 7.53 and newer).
+5. [Give users the role](#5-give-users-the-role) that contains the catalog.
+6. [Clear the caches and check](#6-clear-the-caches-and-check).
+7. [Set up the tour database in n8n](#7-set-up-the-tour-database-in-n8n-optional) (optional, for publishing tours without redeploying).
+8. [Create tours](#8-create-tours).
+
+### 1. Build the plugin
+
+Requires Node.js 18 or newer and Git.
+
+```bash
+git clone https://github.com/boripanc/FioriShepherdJS.git
+cd FioriShepherdJS
+git checkout main && git pull     # always build from the latest main
+npm install
+npm run build                     # output in dist/
+```
+
+Then zip the **contents** of `dist/` (not the `dist` folder itself), so `manifest.json` and `Component.js` sit at
+the top level of the zip. Leave out the `*.map` files; they are only for debugging.
+
+```bash
+cd dist && zip -r ../zfiori_guide.zip . -x "*.map" && cd ..
+```
+
+On Windows: open `dist`, select all files and folders except `*.map`, right-click > *Send to* > *Compressed (zipped) folder*.
+
+Always deploy the output of `npm run build`, never the `webapp` folder: the build bundles the plugin
+(`Component-preload.js`) and writes every file in plain ASCII. Some systems serve uploaded files in a non-UTF-8
+code page (for example Thai TIS-620), and without this step texts and icons show up as wrong characters.
+
+### 2. Upload the BSP application `ZFIORI_GUIDE`
+
+**With report `/UI5/UI5_REPOSITORY_LOAD`** (works from SAP GUI or SAP GUI for HTML):
+
+1. Run transaction `SE38`, report `/UI5/UI5_REPOSITORY_LOAD`.
+2. Name of SAPUI5 application: `ZFIORI_GUIDE`.
+3. Choose **Upload** and, as the source, **ZIP file** (not a folder), then pick `zfiori_guide.zip`.
+   If the result lists only one file called `zfiori_guide.zip`, the zip was uploaded as a single file: delete the
+   application again (same report, *Delete*) and repeat with the ZIP-file option.
+4. Enter a description (e.g. *Fiori guided tours*), a package (`$TMP` for a test, or a transportable package) and
+   a transport request if asked. Code page: keep the default (UTF-8).
+5. Run it. The result should list `manifest.json`, `Component.js`, `Component-preload.js`, `lib/...`, `tours/...`.
+
+To update later, run the same report with the same name: it replaces the changed files.
+
+**Or with SAP Fiori tools** from your PC: `npm i -D @sap/ux-ui5-tooling`, create a `ui5-deploy.yaml` for your
+system (BSP `ZFIORI_GUIDE`, package, transport) and run `npx fiori deploy`.
+
+**Then, for both ways:**
+
+- Run report `/UI5/APP_INDEX_CALCULATE` (in `SE38`) for `ZFIORI_GUIDE`, so the Launchpad knows the new version.
+- Check in the browser that
+  `https://<your host>/sap/bc/ui5_ui5/sap/zfiori_guide/manifest.json` opens and shows `"id": "fiori.shepherd.guide"`.
+  If you get a 404 or a logon error, check in `SICF` that the service `/sap/bc/ui5_ui5/sap/zfiori_guide` is active.
+
+### 3. Register the plugin in the Launchpad
+
+A Launchpad plugin is an app with the special intent `Shell-plugin`. The Launchpad loads every `Shell-plugin`
+app a user has in their catalogs when the Launchpad starts. You register it in a catalog with a target mapping.
+
+Open the Launchpad content tool:
+
+- **SAP_UI 7.55 and newer (S/4HANA 2020+):** *Launchpad Content Manager*, transaction `/UI2/FLPCM_CUST`
+  (cross-client) or `/UI2/FLPCM_CONF` (this client). Older releases: *Launchpad Designer*,
+  transaction `/UI2/FLPD_CUST` or `/UI2/FLPD_CONF`.
+- Use `_CUST` (client-specific customizing) when you transport the catalog, `_CONF` for a quick test in one client.
+
+Create a **technical catalog** (or use an existing custom one), for example ID `ZFIORI_GUIDE_TC`, title
+*Fiori guided tours*. In it, create a **target mapping** with these values:
+
+| Field | Value |
+|---|---|
+| Semantic object | `Shell` |
+| Action | `plugin` |
+| Application type | SAPUI5 Fiori App |
+| Title | Fiori guided tours |
+| URL | `/sap/bc/ui5_ui5/sap/zfiori_guide` |
+| ID | `fiori.shepherd.guide` |
+| Device types | Desktop, Tablet, Phone |
+| Parameters | Optional, see below. *Allow additional parameters* can stay on. |
+
+No tile is needed: the plugin has no tile and never appears on the home page.
+
+**Plugin settings as target mapping parameters (optional).** Every setting in
+[Plugin configuration](#plugin-configuration) can be given as a parameter (name = setting, default value = value).
+Common ones:
+
+| Parameter | Example value | Why |
+|---|---|---|
+| `toursApiUrl` | `https://<your n8n host>/webhook/fiori-guide` | Use your own n8n instance; an empty value turns the database off. |
+| `toursUrl` | `/sap/bc/ui5_ui5/sap/zfiori_tours` | Load `index.json` from a separate BSP, so tour files can change without redeploying the plugin. |
+| `enableEditor` | `false` | Hide the tour editor in production (default `url`: only with `?fiori-guide-editor=true`). |
+| `autoStart` | `false` | Don't start tours by themselves on the first visit. |
+
+If authors and users should get different settings (e.g. editor on for authors only), create two catalogs with
+one target mapping each and put them in different roles.
+
+### 4. Activate the plugin (SAP_UI 7.53 and newer)
+
+Newer Launchpads load only plugins that are activated:
+
+1. Run transaction `/UI2/FLP_CUS_CONF` (client-specific) or `/UI2/FLP_SYS_CONF` (all clients).
+2. Open **FLP Plug-Ins** (in some releases: *Plug-in activation*), choose *New Entries*.
+3. Plug-in ID: `fiori.shepherd.guide`, activation status: **Active**. Save (in a transport if asked).
+
+On older releases this step does not exist; the plugin is active as soon as it is in a user's catalog.
+
+### 5. Give users the role
+
+1. Run transaction `PFCG` and open (or create) the role that should get tours, for example a copy of your
+   Fiori business role, or a small role `Z_FIORI_GUIDE` that every Launchpad user gets.
+2. On the **Menu** tab, choose *Insert node* > *SAP Fiori Launchpad* > *Launchpad Catalog*, catalog type
+   *Technical Catalog* (or *Business Catalog* if you used one), and pick `ZFIORI_GUIDE_TC`.
+3. Save, generate the authorization profile if asked, and assign the role to the users (tab **User**,
+   or `SU01`). Run *User comparison*.
+
+Users need no extra authorizations beyond normal Launchpad access.
+
+### 6. Clear the caches and check
+
+- Run report `/UI2/INVALIDATE_GLOBAL_CACHES` (`SE38`, execute in update mode) so the Launchpad picks up the new
+  catalog and target mapping. After a plugin update, `/UI5/APP_INDEX_CALCULATE` for `ZFIORI_GUIDE` is usually
+  enough; also run `/UI2/INVALIDATE_CLIENT_CACHES` if users still get the old version.
+- Users: reload the Launchpad without cache (Ctrl+F5), or log off and on again.
+
+**Check:** open the Launchpad as a user with the role. In an app that has a tour, a book icon (*Guided Tour*)
+appears in the shell header, and the tour starts by itself on the first visit. Apps without a tour show no button
+(`hideButtonWithoutTours`).
+
+**If nothing appears**, open the browser developer tools (F12):
+
+| You see | Fix |
+|---|---|
+| No request to `zfiori_guide` in the *Network* tab | The plugin is not loaded: check the target mapping (semantic object `Shell`, action `plugin`, URL, ID), the role assignment (step 5), the activation (step 4) and clear the caches (step 6). |
+| `zfiori_guide/manifest.json` 404 | The BSP upload is wrong (zip uploaded as one file, or zipped with a `dist` folder inside). Repeat step 1 and 2. |
+| Plugin loads, but no button | No tour matches the current app. Check the tour's `intent` / `appId` against the app (the URL hash `#SemanticObject-action`). |
+| Strange characters in the popups | The BSP was not built with `npm run build`. Rebuild and upload. |
+| Error about `n8n` / CORS in the *Console* | The tour database cannot be reached from the browser; file tours still work. See step 7. |
+
+### 7. Set up the tour database in n8n (optional)
+
+With the database, authors press **Publish** in the tour editor and the tour is live for everyone on their next
+Launchpad load, without touching the BSP. Without it, tours come only from `tours/index.json` in the BSP
+(see [Writing tours by hand](#writing-tours-by-hand)).
+
+The n8n side is two data tables and two workflows. The project's own instance already has them
+(`https://n8n.teddybiere.info`, the plugin's default `toursApiUrl`). To set them up on another n8n instance:
+
+1. **Create two data tables** in n8n (*Overview* > *Data tables* > *Create*):
+   - `FioriGuideTours` with the string columns `tour_id`, `title`, `entry`, `definition`, `updated_by` and the
+     number column `version`.
+   - `FioriGuideConfig` with the string column `publish_key`. Add **one row** with a long random value. This is the
+     *publishing key* authors type in the editor. Keep it secret; change the value to lock out old keys.
+2. **Create the two workflows** from [`n8n/load-tours.workflow.js`](n8n/load-tours.workflow.js) and
+   [`n8n/save-tours.workflow.js`](n8n/save-tours.workflow.js) (n8n Workflow SDK code, e.g. with the n8n MCP server
+   or by rebuilding them in the editor), and point their data table nodes to your two tables.
+   - *Fiori Guide | Load tours (API)*: `GET /webhook/fiori-guide/tours` and `GET /webhook/fiori-guide/tour?id=<id>`
+   - *Fiori Guide | Save tours (API)*: `POST /webhook/fiori-guide/save` and `POST /webhook/fiori-guide/delete`
+3. **Publish (activate) both workflows.** Inactive workflows only answer on the `webhook-test` URLs.
+4. **Allow your Launchpad host.** The users' browsers call n8n directly, so the n8n host must be reachable from
+   their network (HTTPS, valid certificate). The webhooks allow any origin (CORS `*`); to narrow it down, set
+   *Allowed Origins* on the four webhook nodes to your Launchpad host, e.g. `https://s4dev.example.com`.
+5. **Point the plugin to it:** target mapping parameter `toursApiUrl` = `https://<your n8n host>/webhook/fiori-guide`
+   (step 3), then clear the caches (step 6).
+6. **Check:** `curl https://<your n8n host>/webhook/fiori-guide/tours` returns `{ "tours": [...] }`.
+
+More details on the tables and workflows: [n8n/README.md](n8n/README.md).
+
+### 8. Create tours
+
+**With the editor (recommended).** Open the Launchpad with `?fiori-guide-editor=true` before the `#`, e.g.
+`https://<host>/sap/bc/ui2/flp?fiori-guide-editor=true#Shell-home`, open the app, press the pencil in the shell
+header and click the elements a step should point at. Then:
+
+- **Publish** (with the n8n database): the tour is saved in n8n and live for all users. The first time, the editor
+  asks for the publishing key from `FioriGuideConfig`.
+- **Export** (without the database): download `index.json` with all tours, put it into `webapp/tours/`,
+  rebuild and upload the BSP (steps 1, 2 and 6).
+
+See [Tour editor](#tour-editor-no-json-needed) for the details.
+
+**As JSON files.** Put the steps file into `webapp/tours/`, add an entry to `webapp/tours/index.json`, then rebuild
+and upload (steps 1, 2 and 6). See [Writing tours by hand](#writing-tours-by-hand). A ready example that walks
+through creating a sales order in SAP GUI (`VA01`) is
+[`webapp/tours/sales-order-gui.json`](webapp/tours/sales-order-gui.json).
+
+A tour belongs to an app through its `intent` (the `#SemanticObject-action` part of the app's URL, e.g.
+`SalesOrder-manage`) or its `appId`. Use `Shell-home` for the Launchpad home page.
+
+### SAP BTP (Build Work Zone)
+
+The plugin is a standard FLP plugin (`sap.flp.type: "plugin"`), so it can be deployed to the HTML5 Application
+Repository with an MTA and added in the Site Manager's Content Manager, then assigned to a role. That needs an
+`xs-app.json`, an `mta.yaml` and a `sap.cloud` section in `manifest.json`, which are not part of this version.
+
 ## Try it locally
 
 Requires Node.js 18+.
@@ -290,28 +499,6 @@ Apps can start or reset tours through the UI5 EventBus, without depending on the
 sap.ui.getCore().getEventBus().publish("fiori.shepherd.guide", "start", { tourId: "salesorder-overview" });
 sap.ui.getCore().getEventBus().publish("fiori.shepherd.guide", "reset", { tourId: "salesorder-overview" }); // or {} for all
 ```
-
-## Deploying
-
-### SAP S/4HANA / ABAP Front-End Server (on-premise)
-
-1. Build: `npm run build` (output in `dist/`).
-2. Deploy `dist/` as a BSP application, e.g. `ZFIORI_GUIDE`, with the SAP Fiori tools deploy command
-   (`npx fiori deploy`, after `npm i -D @sap/ux-ui5-tooling` and a `ui5-deploy.yaml`) or report `/UI5/UI5_REPOSITORY_LOAD`.
-   Then run `/UI5/APP_INDEX_CALCULATE` for the BSP.
-   The build writes every file in plain ASCII (non-ASCII characters escaped), so it works even when the server
-   serves the files in a non-UTF-8 code page such as Thai. Always deploy the output of `npm run build`.
-3. In the Launchpad Designer / app manager, create a technical catalog entry (or use a custom catalog) with a
-   **target mapping**: semantic object `Shell`, action `plugin`, application type *SAPUI5 Fiori App*,
-   URL `/sap/bc/ui5_ui5/sap/zfiori_guide`, ID `fiori.shepherd.guide`. Add plugin parameters (table above) as target mapping parameters if needed.
-4. Add the catalog to the business roles whose users should get tours.
-5. On newer SAP_UI releases, also activate the plugin in `/UI2/FLP_CUS_CONF` (or `/UI2/FLP_SYS_CONF`) under *FLP Plugins*.
-
-### SAP BTP (Build Work Zone)
-
-The plugin is a standard FLP plugin (`sap.flp.type: "plugin"`), so it can be deployed to the HTML5 Application
-Repository with an MTA and added in the Site Manager's Content Manager, then assigned to a role. That needs an
-`xs-app.json`, an `mta.yaml` and a `sap.cloud` section in `manifest.json`, which are not part of this first version.
 
 ## Project layout
 
