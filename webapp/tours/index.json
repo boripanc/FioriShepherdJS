@@ -68,8 +68,9 @@
 			"title": {
 				"en": "Create a sales order in SAP GUI"
 			},
-			"intent": "SalesDocument-createGui",
-			"version": 1,
+			"intent": "Shell-startGUI",
+			"start": "#Shell-startGUI?sap-ui2-tcode=VA01",
+			"version": 2,
 			"url": "sales-order-gui.json"
 		}
 	]

@@ -1,5 +1,5 @@
 {
-	"$comment": "A tour that goes across apps: Launchpad home -> Manage Sales Orders -> SAP GUI (VA01). Steps with \"app\" are shown in that app; the tour pauses in between and goes on after a page reload too.",
+	"$comment": "A tour that goes across apps: Launchpad home -> Manage Sales Orders -> SAP GUI (VA01, opened directly with #Shell-startGUI?sap-ui2-tcode=VA01). Steps with \"app\" are shown in that app; the tour pauses in between and goes on after a page reload too.",
 	"steps": [
 		{
 			"id": "welcome",
@@ -25,19 +25,11 @@
 		{
 			"id": "to-gui",
 			"title": "Create the order in SAP GUI",
-			"text": "Orders are created with transaction VA01. Press <b>Next</b> to open it."
-		},
-		{
-			"id": "tcode",
-			"app": { "intent": "SalesDocument-createGui", "hash": "#SalesDocument-createGui" },
-			"title": "Start the transaction",
-			"text": "Type the transaction code and press <b>Enter</b>.",
-			"tcode": "VA01",
-			"position": "bottom-start",
-			"waitFor": 10000
+			"text": "Orders are created with transaction VA01. Press <b>Next</b> to open it in SAP GUI."
 		},
 		{
 			"id": "order-type",
+			"app": { "intent": "Shell-startGUI", "hash": "#Shell-startGUI?sap-ui2-tcode=VA01" },
 			"title": "Order type",
 			"text": "Enter the order type for a standard order.",
 			"target": { "frame": true, "selector": "[title='Sales Document Type']" },

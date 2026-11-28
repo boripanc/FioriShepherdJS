@@ -1,39 +1,118 @@
 {
+	"$comment": "Create a standard sales order with VA01 in SAP GUI for HTML. The catalog entry opens VA01 directly (start page #Shell-startGUI?sap-ui2-tcode=VA01). Steps: initial screen, header data, one item, save. Field selectors use the SAP GUI field tooltips (title attribute), case-insensitive, with alternatives for different releases. If a field is not found the step is shown in the middle of the screen, so the text still tells the user what to do. Re-pick a field in the tour editor if it is not highlighted on your system.",
 	"steps": [
 		{
 			"id": "welcome",
 			"title": "Create a sales order",
-			"text": "This tour shows you how to start transaction <b>VA01</b> and fill in the first screen."
-		},
-		{
-			"id": "tcode",
-			"title": "Start the transaction",
-			"text": "Click the command field, type the transaction code and press <b>Enter</b>.",
-			"tcode": "VA01",
-			"position": "bottom-start"
+			"text": "<p>This tour walks you through creating a standard sales order with transaction <b>VA01</b> (Create Sales Documents):</p><ol><li>Choose the order type and sales area</li><li>Enter the customer and the purchase order number</li><li>Add the material and quantity</li><li>Save the order</li></ol><p>You type the values yourself; the tour shows you where.</p>"
 		},
 		{
 			"id": "order-type",
 			"title": "Order type",
-			"text": "Enter the order type for a standard order.",
-			"target": {
-				"frame": true,
-				"selector": "[title='Sales Document Type']"
-			},
+			"text": "Enter the order type. A standard order is <b>OR</b>. If your company uses its own order type, type that one and choose <b>Next</b>.",
+			"target": { "frame": true, "selector": "[title='Sales Document Type' i], [title='Order Type' i]" },
 			"expectValue": "OR",
 			"advanceOn": "input",
+			"showNext": true,
 			"position": "right",
 			"waitFor": 8000
 		},
 		{
 			"id": "sales-org",
 			"title": "Sales organization",
-			"text": "Enter your sales organization, for example 1010. Then press Enter to continue to the item screen.",
-			"target": {
-				"frame": true,
-				"selector": "[title='Sales Organization']"
-			},
+			"text": "Enter the sales organization that sells to this customer, for example <b>1010</b>.",
+			"target": { "frame": true, "selector": "[title='Sales Organization' i], [title='Sales Org.' i]" },
 			"position": "right"
+		},
+		{
+			"id": "dist-channel",
+			"title": "Distribution channel",
+			"text": "Enter the distribution channel, for example <b>10</b> (direct sales). Press <b>F4</b> in the field to see the allowed values.",
+			"target": { "frame": true, "selector": "[title='Distribution Channel' i], [title='Distr. Channel' i]" },
+			"position": "right"
+		},
+		{
+			"id": "division",
+			"title": "Division",
+			"text": "Enter the division, for example <b>00</b>. Sales organization, distribution channel and division together are the <i>sales area</i>.",
+			"target": { "frame": true, "selector": "[title='Division' i]" },
+			"position": "right"
+		},
+		{
+			"id": "to-overview",
+			"title": "Go to the order",
+			"text": "Press <b>Enter</b> on your keyboard or click the green check mark to open the order overview.<br>Pressed the Enter key? Choose <b>Next</b> once the next screen appears.",
+			"target": { "frame": true, "selector": "[id$='::btn[0]'], [title^='Enter' i]" },
+			"advanceOn": "click",
+			"showNext": true,
+			"position": "bottom-start"
+		},
+		{
+			"id": "sold-to",
+			"title": "Sold-to party",
+			"text": "Enter the customer number of the customer who orders. Don't know it? Press <b>F4</b> in the field to search by name.",
+			"target": { "frame": true, "selector": "[title='Sold-To Party' i], [title='Sold-to party number' i], [title='Customer number of sold-to party' i]" },
+			"position": "right",
+			"waitFor": 10000
+		},
+		{
+			"id": "ship-to",
+			"title": "Ship-to party",
+			"text": "Where the goods go. Leave it empty to use the sold-to party's address: SAP fills it in when you press Enter.",
+			"target": { "frame": true, "selector": "[title='Ship-To Party' i], [title='Ship-to party number' i]" },
+			"position": "right",
+			"skipIfMissing": true
+		},
+		{
+			"id": "cust-ref",
+			"title": "Customer reference",
+			"text": "Enter the customer's purchase order number, so the customer recognizes the order on the order confirmation and the invoice.",
+			"target": { "frame": true, "selector": "[title='Customer Reference' i], [title='Cust. Reference' i], [title^='Customer purchase order number' i], [title='Purchase order no.' i]" },
+			"position": "right"
+		},
+		{
+			"id": "delivery-date",
+			"title": "Requested delivery date",
+			"text": "Enter the date the customer wants the goods. SAP checks later whether the material can be delivered by then.",
+			"target": { "frame": true, "selector": "[title='Requested delivery date' i], [title='Req. Deliv.Date' i], [title='Req. Deliv. Date' i]" },
+			"position": "right",
+			"skipIfMissing": true
+		},
+		{
+			"id": "material",
+			"title": "Material",
+			"text": "In the first item row, enter the material number. Press <b>F4</b> to search for a material.",
+			"target": { "frame": true, "selector": "[title='Material' i], [title='Material Number' i], [title='Material entered' i]" },
+			"position": "top"
+		},
+		{
+			"id": "quantity",
+			"title": "Order quantity",
+			"text": "Enter how many the customer orders, in the sales unit (for example PC).",
+			"target": { "frame": true, "selector": "[title='Order Quantity' i], [title^='Cumulative Order Quantity' i], [title='Order Qty' i]" },
+			"position": "top"
+		},
+		{
+			"id": "check-item",
+			"title": "Check the item",
+			"text": "Press <b>Enter</b>. SAP fills in the description, price and availability for the item. If a popup appears (for example for availability), confirm it. Add more items in the next rows the same way, then choose <b>Next</b>.",
+			"target": { "frame": true, "selector": "[id$='::btn[0]'], [title^='Enter' i]" },
+			"showNext": true,
+			"position": "bottom-start"
+		},
+		{
+			"id": "save",
+			"title": "Save the order",
+			"text": "When everything is right, click <b>Save</b> (or press <b>Ctrl+S</b>).",
+			"target": { "frame": true, "selector": "[id$='::btn[11]'], [title^='Save' i]" },
+			"position": "bottom",
+			"advanceOn": "click",
+			"showNext": true
+		},
+		{
+			"id": "done",
+			"title": "Order created",
+			"text": "<p>The status bar at the bottom shows <i>Standard Order ... has been saved</i> with the new order number. Note it down or give it to the customer.</p><p>To change or display the order later, use <b>VA02</b> or <b>VA03</b>.</p>"
 		}
 	]
 }

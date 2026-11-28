@@ -35,7 +35,7 @@ try {
 	await page.evaluate(() => {
 		localStorage.clear();
 		localStorage.setItem("fiori.shepherd.guide.seen.salesorder-overview", "1");
-		localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "1");
+		localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "2");
 	});
 	await page.reload();
 	await page.waitForSelector("#fioriShepherdGuideHeaderButton", { timeout: 60000 });
