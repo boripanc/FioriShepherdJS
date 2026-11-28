@@ -28,7 +28,7 @@ sap.ui.define([
 
 	var LOG_COMPONENT = "fiori.shepherd.guide";
 	var HEADER_BUTTON_ID = "fioriShepherdGuideHeaderButton";
-	var EDITOR_BUTTON_ID = "fioriShepherdGuideEditorButton";
+	var EDITOR_ENTRY_ID = "fioriShepherdGuideEditorEntry";
 	var EVENT_CHANNEL = "fiori.shepherd.guide";
 
 	/** What is kept of a tour to go on later (catalog entries may carry more). */
@@ -61,22 +61,23 @@ sap.ui.define([
 			this._aAllTours = [];
 			this._iContextSeq = 0;
 
-			this._bEditorEnabled = this._isEditorEnabled();
-			if (this._bEditorEnabled) {
-				// the author sees their unpublished drafts like normal tours
-				this._oRegistry.setOverlay(DraftStore.list);
-			}
-
 			this._oHeaderItemReady = this._oConfig.showHeaderButton
 				? this._createHeaderButton().catch(function (oError) {
 					Log.error("Could not create the guided tour header button", oError, LOG_COMPONENT);
 				})
 				: Promise.resolve();
-			if (this._bEditorEnabled) {
-				this._createEditorButton().catch(function (oError) {
-					Log.error("Could not create the tour editor header button", oError, LOG_COMPONENT);
-				});
-			}
+
+			// the editor is an entry in the Guided Tour menu, for the users allowed to edit
+			this._bEditorEnabled = false;
+			this._oEditorReady = this._isEditorEnabled().then(function (bEnabled) {
+				this._bEditorEnabled = bEnabled;
+				if (bEnabled) {
+					// the author sees their unpublished drafts like normal tours
+					this._oRegistry.setOverlay(DraftStore.list);
+					this._refreshContext();
+				}
+				return bEnabled;
+			}.bind(this));
 
 			this._onHashChange = this._refreshContext.bind(this);
 			window.addEventListener("hashchange", this._onHashChange);
@@ -213,7 +214,7 @@ sap.ui.define([
 				return;
 			}
 			if (this._aCurrentTours.length > 0 || this._getPausedTour() || this._otherTours().length > 0
-				|| !this._oConfig.hideButtonWithoutTours) {
+				|| this._bEditorEnabled || !this._oConfig.hideButtonWithoutTours) {
 				this._fnShowButton();
 			} else {
 				this._fnHideButton();
@@ -242,7 +243,7 @@ sap.ui.define([
 			var aTours = this._aCurrentTours;
 			var oPaused = this._getPausedTour();
 			var bOthers = this._otherTours().length > 0;
-			if (oPaused || aTours.length > 1 || (aTours.length === 1 && bOthers)) {
+			if (oPaused || aTours.length > 1 || (aTours.length === 1 && bOthers) || this._bEditorEnabled) {
 				this._openTourChooser(oEvent.getSource(), aTours, oPaused, bOthers);
 				return;
 			}
@@ -347,6 +348,16 @@ sap.ui.define([
 						icon: "sap-icon://search",
 						press: function () {
 							that.openAllGuides();
+						}
+					}));
+				}
+				if (that._bEditorEnabled) {
+					var bOpen = !!(that._oEditor && that._oEditor.isOpen());
+					aButtons.push(new Button(EDITOR_ENTRY_ID, {
+						text: that._oBundle.getText(bOpen ? "editorClose" : "editorOpen"),
+						icon: bOpen ? "sap-icon://decline" : "sap-icon://edit",
+						press: function () {
+							that.openEditor();
 						}
 					}));
 				}
@@ -494,35 +505,34 @@ sap.ui.define([
 		/* ------------------------------------------------------------------ */
 
 		/**
-		 * enableEditor: true (always), false (never) or "url" (default): only when the
-		 * Launchpad URL contains fiori-guide-editor=true, e.g.
-		 * .../FioriLaunchpad.html?fiori-guide-editor=true#SalesOrder-manage
+		 * Who gets the editor entry in the Guided Tour menu:
+		 * enableEditor: true (default), false (never) or "url" (only with ?fiori-guide-editor=true
+		 * in the Launchpad URL). With true, editorUsers can limit it to some SAP user IDs
+		 * (comma-separated, case-insensitive); empty or "*" means every user.
 		 */
 		_isEditorEnabled: function () {
-			var vSetting = this._oConfig.enableEditor === undefined ? "url" : this._oConfig.enableEditor;
-			if (vSetting === true || vSetting === false) {
-				return vSetting;
+			var vSetting = this._oConfig.enableEditor === undefined ? true : this._oConfig.enableEditor;
+			if (vSetting === false) {
+				return Promise.resolve(false);
 			}
-			try {
-				return new URLSearchParams(window.location.search).get("fiori-guide-editor") === "true";
-			} catch (e) {
-				return false;
-			}
-		},
-
-		_createEditorButton: function () {
-			var that = this;
-			return this._createHeaderItem({
-				id: EDITOR_BUTTON_ID,
-				icon: "sap-icon://edit",
-				tooltip: this._oBundle.getText("editorButtonTooltip"),
-				text: this._oBundle.getText("editorButtonTooltip"),
-				ariaLabel: this._oBundle.getText("editorButtonTooltip"),
-				press: function () {
-					that.openEditor();
+			if (vSetting === "url") {
+				try {
+					return Promise.resolve(new URLSearchParams(window.location.search).get("fiori-guide-editor") === "true");
+				} catch (e) {
+					return Promise.resolve(false);
 				}
-			}).then(function (oItem) {
-				oItem.show();
+			}
+			var aUsers = String(this._oConfig.editorUsers || "").split(/[\s,;]+/).filter(Boolean).map(function (s) {
+				return s.toUpperCase();
+			});
+			if (aUsers.length === 0 || aUsers.indexOf("*") >= 0) {
+				return Promise.resolve(true);
+			}
+			return getContainer().getServiceAsync("UserInfo").then(function (oUserInfo) {
+				return aUsers.indexOf(String(oUserInfo.getId() || "").toUpperCase()) >= 0;
+			}).catch(function (oError) {
+				Log.warning("UserInfo service not available; tour editor off", oError, LOG_COMPONENT);
+				return false;
 			});
 		},
 

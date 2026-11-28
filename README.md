@@ -128,7 +128,8 @@ Common ones:
 |---|---|---|
 | `toursApiUrl` | `https://<your n8n host>/webhook/fiori-guide` | Use your own n8n instance; an empty value turns the database off. |
 | `toursUrl` | `/sap/bc/ui5_ui5/sap/zfiori_tours` | Load `index.json` from a separate BSP, so tour files can change without redeploying the plugin. |
-| `enableEditor` | `false` | Hide the tour editor in production (default `url`: only with `?fiori-guide-editor=true`). |
+| `editorUsers` | `BIERE, JSMITH` | Only these SAP user IDs get **Add or edit guides** in the Guided Tour menu (default: every user). |
+| `enableEditor` | `false` | Hide the tour editor completely (`url`: only with `?fiori-guide-editor=true`). |
 | `autoStart` | `false` | Don't start tours by themselves on the first visit. |
 
 If authors and users should get different settings (e.g. editor on for authors only), create two catalogs with
@@ -207,9 +208,8 @@ More details on the tables and workflows: [n8n/README.md](n8n/README.md).
 
 ### 8. Create tours
 
-**With the editor (recommended).** Open the Launchpad with `?fiori-guide-editor=true` before the `#`, e.g.
-`https://<host>/sap/bc/ui2/flp?fiori-guide-editor=true#Shell-home`, open the app, press the pencil in the shell
-header and click the elements a step should point at. Then:
+**With the editor (recommended).** Open the app, press the Guided Tour button in the shell header, choose
+**Add or edit guides** and click the elements a step should point at. Then:
 
 - **Publish** (with the n8n database): the tour is saved in n8n and live for all users. The first time, the editor
   asks for the publishing key from `FioriGuideConfig`.
@@ -246,7 +246,7 @@ The sandbox Launchpad has a demo app ("Manage Sales Orders") and a mock SAP GUI 
 Use the header button (book icon) to start tours again. To see the auto-start once more, run
 `localStorage.clear()` in the browser console.
 
-Open `http://localhost:8080/test/flpSandbox.html?fiori-guide-editor=true` to try the tour editor.
+Open `http://localhost:8080/test/flpSandbox.html?fiori-guide-editor=true` to try the tour editor (in the sandbox only, the editor stays off without that flag so the end-user view can be tested).
 
 End-to-end tests (Playwright) drive the sandbox, one for the tours and one for the editor:
 
@@ -260,9 +260,9 @@ npm test
 
 ![Tour editor](docs/editor-step.png)
 
-1. Open the Launchpad with `?fiori-guide-editor=true` in the URL (before the `#`), e.g.
-   `https://<host>/sap/bc/ui2/flp?fiori-guide-editor=true#SalesOrder-manage`. A pencil button appears in the shell header.
-2. Open the app you want to explain and press the pencil. The editor panel opens on the side (the ⟷ button moves it to the other side).
+1. Open the app you want to explain. No special URL is needed.
+2. Press the Guided Tour button in the shell header and choose **Add or edit guides**. The editor panel opens on the
+   side (the ⟷ button moves it to the other side). The same menu entry closes it again.
 3. Choose **+ New tour** (or pick an existing tour to change it) and give it a name.
 4. Press **Add step**, then click the element in the app the step should point at. The click does not trigger the app.
    The editor shows what it picked and how reliable the reference is:
@@ -277,7 +277,9 @@ npm test
    who replaces `tours/index.json` (or the file at `toursUrl`) and deploys. Saving a changed existing tour bumps its
    `version`, so users see the updated tour once.
 
-`enableEditor` controls access: `"url"` (default, as above), `true` (always) or `false` (never, e.g. in production).
+Who gets the editor: by default every user. Set `editorUsers` to a comma-separated list of SAP user IDs (case does not
+matter) to show it only to them. `enableEditor` can turn it off (`false`) or bring back the old URL switch (`"url"`:
+only with `?fiori-guide-editor=true` before the `#`).
 Drafts never leave the author's browser until they are published or exported, so the editor is safe to leave on: other users see nothing.
 
 ## Tours in a database (n8n)
@@ -512,7 +514,8 @@ Defaults are in `manifest.json` (`sap.ui5/config/fioriGuide`). The Launchpad can
 | `hideButtonWithoutTours` | `true` | Hide the button in apps that have no tour. |
 | `showAllTours` | `true` | Offer **All guides...** in the Guided Tour button, so guides can be started from any page. |
 | `resumeMinutes` | `30` | How long a paused or interrupted tour can be continued (in this browser tab). |
-| `enableEditor` | `"url"` | Tour editor access: `"url"` (with `?fiori-guide-editor=true`), `true` or `false`. |
+| `enableEditor` | `true` | Tour editor in the Guided Tour menu: `true`, `false`, or `"url"` (only with `?fiori-guide-editor=true`). |
+| `editorUsers` | `""` | Comma-separated SAP user IDs that get the editor. Empty or `*`: every user. |
 
 ## Starting tours from an app
 
