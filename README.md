@@ -223,7 +223,8 @@ See [Tour editor](#tour-editor-no-json-needed) for the details.
 **As JSON files.** Put the steps file into `webapp/tours/`, add an entry to `webapp/tours/index.json`, then rebuild
 and upload (steps 1, 2 and 6). See [Writing tours by hand](#writing-tours-by-hand). A ready example that walks
 through creating a sales order in SAP GUI (`VA01`) is
-[`webapp/tours/sales-order-gui.json`](webapp/tours/sales-order-gui.json).
+[`webapp/test/tours/sales-order-gui.json`](webapp/test/tours/sales-order-gui.json) (copy it into `webapp/tours/`
+and add its catalog entry to use it).
 
 A tour belongs to an app through its `intent` (the `#SemanticObject-action` part of the app's URL, e.g.
 `SalesOrder-manage`) or its `appId`. Use `Shell-home` for the Launchpad home page.
@@ -388,7 +389,7 @@ directly in the app*.
 
 ## Ready-made tour: creating a sales order (VA01)
 
-[`tours/sales-order-gui.json`](webapp/tours/sales-order-gui.json) guides a user through a standard sales order in
+[`test/tours/sales-order-gui.json`](webapp/test/tours/sales-order-gui.json) guides a user through a standard sales order in
 SAP GUI for HTML, in 15 steps:
 
 1. The guide opens **VA01** directly (start page `#Shell-startGUI?sap-ui2-tcode=VA01`).
@@ -420,7 +421,7 @@ A tour keeps going when the user moves from one screen or app to the next:
 - **Inside one app** (list to object page, SAP GUI screen to screen): nothing to do. Each step waits up to
   `waitFor` ms for its element.
 - **Into another app:** give the first step of the new app an `app` field. Steps after it stay in that app until
-  the next `app`. Example ([`tours/order-journey.json`](webapp/tours/order-journey.json)): Launchpad home, then
+  the next `app`. Example ([`test/tours/order-journey.json`](webapp/test/tours/order-journey.json)): Launchpad home, then
   Manage Sales Orders, then SAP GUI.
 
 ```json
@@ -478,6 +479,8 @@ and the plugin takes them there first.
 ## Writing tours by hand
 
 Tours live in [`webapp/tours/`](webapp/tours). `index.json` is the catalog; each entry says which app a tour belongs to.
+The plugin ships with an empty catalog. The sample tours used by the sandbox and the tests are in
+[`webapp/test/tours/`](webapp/test/tours) (not deployed).
 
 ```json
 {
@@ -597,7 +600,8 @@ webapp/
   lib/thirdparty/           bundled ShepherdJS (generated, see below)
   css/guide.css             Fiori theme for the popups
   css/editor.css            editor panel and element picker
-  tours/                    tour catalog and step files
+  tours/                    tour catalog (empty by default) and step files
+  test/tours/               sample tours used by the sandbox and the tests
   test/flpSandbox.html      local Launchpad sandbox
   test/demoapp/             demo app used by the sandbox and the smoke test
 scripts/bundle-shepherd.mjs bundles ShepherdJS into webapp/lib/thirdparty

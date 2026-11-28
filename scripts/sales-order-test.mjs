@@ -1,4 +1,4 @@
-// Plays the VA01 sales order tour (tours/sales-order-gui.json) end to end against the mock
+// Plays the VA01 sales order tour (test/tours/sales-order-gui.json) end to end against the mock
 // SAP GUI for HTML. Start the dev server first (npm run serve), then: node scripts/sales-order-test.mjs
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
