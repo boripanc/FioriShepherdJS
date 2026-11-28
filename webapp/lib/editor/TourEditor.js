@@ -43,10 +43,12 @@ sap.ui.define([
 	"./ElementPicker",
 	"./SelectorBuilder",
 	"../DraftStore",
-	"../AppMatch"
+	"../AppMatch",
+	"../StartPage",
+	"sap/m/FlexItemData"
 ], function (JSONModel, Page, Bar, Title, Button, Label, Input, TextArea, CheckBox, Select, List, CustomListItem,
 	HBox, VBox, MText, ObjectStatus, Toolbar, ToolbarSpacer, OverflowToolbar, MessageToast, MessageBox, MessageStrip, Dialog, Item, Icon,
-	includeStylesheet, Text, TargetResolver, ElementPicker, SelectorBuilder, DraftStore, AppMatch) {
+	includeStylesheet, Text, TargetResolver, ElementPicker, SelectorBuilder, DraftStore, AppMatch, StartPage, FlexItemData) {
 	"use strict";
 
 	var NEW_TOUR_KEY = "__new";
@@ -255,6 +257,8 @@ sap.ui.define([
 				autoStart: true,
 				onlyThisScreen: false,
 				intent: oContext.intent,
+				// where users are taken when they start the guide from another page
+				start: StartPage.suggestion(),
 				version: 1,
 				steps: []
 			});
@@ -270,6 +274,8 @@ sap.ui.define([
 				innerHash: oTour.innerHash,
 				intent: oTour.intent,
 				appId: oTour.appId,
+				start: oTour.start || "",
+				listed: oTour.listed,
 				version: oTour.version || 1,
 				modal: oTour.modal,
 				steps: (oTour.steps || []).map(function (oStep) {
@@ -506,6 +512,19 @@ sap.ui.define([
 						new Input("fioriGuideEditorTourTitle", { value: "{/tour/title}", valueLiveUpdate: true, placeholder: this.t("editor.tourTitlePlaceholder"), liveChange: this._markDirty.bind(this) }),
 						new CheckBox({ wrapping: true, text: this.t("editor.autoStart"), selected: "{/tour/autoStart}", select: this._markDirty.bind(this) }),
 						new CheckBox({ wrapping: true, text: this.t("editor.onlyThisScreen"), selected: "{/tour/onlyThisScreen}", select: this._markDirty.bind(this) }),
+						new Label({ text: this.t("editor.startPage"), wrapping: true, labelFor: "fioriGuideEditorStartPage" }),
+						new HBox({
+							alignItems: "Center",
+							items: [
+								new Input("fioriGuideEditorStartPage", { value: "{/tour/start}", valueLiveUpdate: true, placeholder: this.t("editor.startPagePlaceholder"),
+									liveChange: this._markDirty.bind(this) }).setLayoutData(new FlexItemData({ growFactor: 1 })),
+								new Button("fioriGuideEditorStartHere", { icon: "sap-icon://locate-me", tooltip: this.t("editor.useThisPage"), type: "Transparent",
+									press: function () {
+										oModel.setProperty("/tour/start", StartPage.suggestion());
+										that._markDirty();
+									} })
+							]
+						}),
 						new Toolbar({
 							style: "Clear",
 							content: [
@@ -801,6 +820,12 @@ sap.ui.define([
 		}
 		if (oTour.modal === false) {
 			oDef.modal = false;
+		}
+		if (oTour.start && String(oTour.start).trim()) {
+			oDef.start = String(oTour.start).trim();
+		}
+		if (oTour.listed === false) {
+			oDef.listed = false;
 		}
 		if (oTour.onlyThisScreen) {
 			oDef.innerHash = oTour.innerHash !== undefined ? oTour.innerHash : screenPattern(oContext.innerHash);

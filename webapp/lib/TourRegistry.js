@@ -10,12 +10,14 @@
  *   autoStart  overrides the plugin's autoStart setting for this tour
  *   version    bump to auto-start the tour again for users who already saw it
  *   url        file with the steps, relative to the catalog; or put "steps" inline
+ *   start      page the tour starts on (see StartPage); started from elsewhere, the user is taken there
+ *   listed     false hides the tour from the "All guides" list
  *
  * With a tour database (TourStore, config toursApiUrl) its tours are added to the file
  * catalog and win over a file tour with the same id. If the database cannot be reached,
  * the file catalog is used alone.
  */
-sap.ui.define(["sap/base/Log", "./AppMatch"], function (Log, AppMatch) {
+sap.ui.define(["sap/base/Log", "./AppMatch", "./StartPage"], function (Log, AppMatch, StartPage) {
 	"use strict";
 
 	function fetchJson(sUrl) {
@@ -28,7 +30,8 @@ sap.ui.define(["sap/base/Log", "./AppMatch"], function (Log, AppMatch) {
 	}
 
 	function matches(oTour, oContext) {
-		return AppMatch.matches(oTour, oContext);
+		// a start page with parameters (e.g. a SAP GUI transaction) narrows where the tour belongs
+		return AppMatch.matches(oTour, oContext) && StartPage.paramsMatch(oTour.start, oContext.hash || "");
 	}
 
 	/**

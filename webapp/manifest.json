@@ -47,6 +47,7 @@
         "autoStart": true,
         "showHeaderButton": true,
         "hideButtonWithoutTours": true,
+        "showAllTours": true,
         "resumeMinutes": 30
       }
     }

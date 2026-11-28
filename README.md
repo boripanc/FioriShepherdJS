@@ -191,6 +191,28 @@ and steps added there are saved with that app. Once a tour spans several apps, t
 | `"SalesOrder-manage"` | An intent, wildcards allowed (`SalesOrder-*`), or a list of them. |
 | `{ "intent": "...", "appId": "...", "innerHash": "^SalesOrder\\(", "hash": "#SalesOrder-manage&/orders" }` | Full form: app id, in-app route (regular expression) and the hash that Next / Continue open. |
 
+## Starting a guide from any page
+
+A guide can have a **start page**: the page or URL where its first step is. Users can then start it from anywhere,
+and the plugin takes them there first.
+
+```json
+{ "id": "sales-order-gui", "title": "Create a sales order", "start": "#Shell-startGUI?sap-ui2-tcode=VA01", "steps": [ ... ] }
+```
+
+- **`start`** can be a Launchpad hash (`#SalesOrder-manage`), a hash with parameters
+  (`#Shell-startGUI?sap-ui2-tcode=WE02`), a hash with an in-app route (`#SalesOrder-manage&/orders`), or a full or
+  relative URL (`/sap/bc/ui2/flp?sap-client=100#SalesOrder-manage`). A URL on another page does a full page load.
+- Hash parameters in `start` also narrow where the guide counts as "here": a guide with
+  `#Shell-startGUI?sap-ui2-tcode=WE02` is offered and auto-started only in WE02, not in every SAP GUI transaction.
+- The Guided Tour button has **All guides...**, a searchable list of every guide that can be opened from the current
+  page. Picking one opens its start page and the tour begins there. On a page with no guide of its own, the button
+  opens the list directly.
+- Guides with `"listed": false` stay out of the list (they still run on their own page). Guides with no `start` and
+  no `app.hash` are left out, because the plugin can't open their page.
+- In the [tour editor](#tour-editor-no-json-needed), **Start page** is filled with the page the tour was created on.
+  **Use the current page** sets it to the page you are on.
+
 ## Writing tours by hand
 
 Tours live in [`webapp/tours/`](webapp/tours). `index.json` is the catalog; each entry says which app a tour belongs to.
@@ -279,6 +301,7 @@ Defaults are in `manifest.json` (`sap.ui5/config/fioriGuide`). The Launchpad can
 | `autoStartDelay` | `1000` | Milliseconds to wait after the app loads before auto-starting. |
 | `showHeaderButton` | `true` | Show the Guided Tour button in the shell header. |
 | `hideButtonWithoutTours` | `true` | Hide the button in apps that have no tour. |
+| `showAllTours` | `true` | Offer **All guides...** in the Guided Tour button, so guides can be started from any page. |
 | `resumeMinutes` | `30` | How long a paused or interrupted tour can be continued (in this browser tab). |
 | `enableEditor` | `"url"` | Tour editor access: `"url"` (with `?fiori-guide-editor=true`), `true` or `false`. |
 
