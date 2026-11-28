@@ -21,6 +21,11 @@
  *   actionDelay    ms the step is shown before the tour fills / clicks, so the user can follow
  *                  (default 1500)
  *   showNext       keep the Next button although advanceOn is set
+ *   followUser     false: on a Next step, only the Next button moves on. By default (true) a Next
+ *                  step also moves on when the user does it directly in the app: clicks the
+ *                  highlighted element, enters a value in the highlighted field (Enter / Tab /
+ *                  leaving it), or does something that brings up the next step's element
+ *                  (see FollowUser)
  *   canClickTarget false blocks clicks on the highlighted element (default true)
  *   classes        extra CSS classes for the step popup
  *   app            the app this step is shown in, for tours that move on to another app (see
@@ -29,7 +34,8 @@
  *                  tour's own intent / appId). When the user is somewhere else, the tour pauses
  *                  and goes on by itself once the user opens that app.
  *
- * Tour fields: steps (required), modal (default true: dims the rest of the screen).
+ * Tour fields: steps (required), modal (default true: dims the rest of the screen),
+ *   followUser (false turns "follow the user" off for all steps of the tour).
  */
 sap.ui.define([
 	"./ShepherdLoader",
@@ -38,8 +44,9 @@ sap.ui.define([
 	"./FrameProxy",
 	"./InputCheck",
 	"./AppMatch",
-	"./StepAction"
-], function (ShepherdLoader, TargetResolver, Text, FrameProxy, InputCheck, AppMatch, StepAction) {
+	"./StepAction",
+	"./FollowUser"
+], function (ShepherdLoader, TargetResolver, Text, FrameProxy, InputCheck, AppMatch, StepAction, FollowUser) {
 	"use strict";
 
 	var ACTION_DELAY_MS = 1500; // how long a step is shown before the tour fills / clicks for the user
@@ -160,6 +167,8 @@ sap.ui.define([
 			var aApps = TourRunner.stepApps(oDef);
 			var oRun = {
 				apps: aApps,
+				steps: aSteps,
+				followUser: oDef.followUser !== false,
 				skipBefore: iStartAt, // steps before this are skipped (once) when resuming
 				resumed: iStartAt > 0 || !!mOptions.resumed,
 				lastShown: -1,
@@ -258,6 +267,13 @@ sap.ui.define([
 		var bFill = vTarget && oStep.fillValue !== undefined && oStep.fillValue !== null;
 		// the tour moves on by itself after clicking / pressing Enter for the user
 		var bAuto = !!vTarget && (oStep.autoClick === true || (bFill && oStep.pressEnter === true));
+		// a Next step also moves on when the user does it in the app (see FollowUser)
+		var bFollow = oRun.followUser && oStep.followUser !== false && !sAdvanceEvent && !bAuto && !bFill
+			&& oStep.canClickTarget !== false;
+		var vNextTarget = null;
+		if (bFollow && !bLast && sameApp(oRun.apps[iIndex], oRun.apps[iIndex + 1])) {
+			vNextTarget = normalizeStep(oRun.steps[iIndex + 1]).target || null;
+		}
 		var sStepId = oStep.id ? String(oStep.id).replace(/[^\w-]/g, "_") : "step-" + (iIndex + 1);
 		var oFound = null; // the real element (may be inside an iframe)
 		var oProxy = null; // stand-in in the Launchpad page for elements inside an iframe
@@ -492,6 +508,14 @@ sap.ui.define([
 								setTimeout(goOn, 50);
 							}
 						});
+					}
+					if (bFollow && (oFound || vNextTarget)) {
+						aCleanup.push(FollowUser.follow({
+							element: oFound,
+							target: oFound ? vTarget : null,
+							nextTarget: vNextTarget,
+							onDone: goOn
+						}));
 					}
 					if ((bFill || bAuto) && oFound) {
 						setupAction(oStepEl);
