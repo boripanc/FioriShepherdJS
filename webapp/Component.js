@@ -21,14 +21,22 @@ sap.ui.define([
 	"./lib/DraftStore",
 	"./lib/TourStore",
 	"./lib/TourSession",
-	"./lib/AppMatch"
-], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourStore, TourSession, AppMatch) {
+	"./lib/AppMatch",
+	"./lib/StartPage"
+], function (Component, Log, TourRegistry, TourRunner, AppContext, SeenStore, Text, DraftStore, TourStore, TourSession, AppMatch, StartPage) {
 	"use strict";
 
 	var LOG_COMPONENT = "fiori.shepherd.guide";
 	var HEADER_BUTTON_ID = "fioriShepherdGuideHeaderButton";
 	var EDITOR_BUTTON_ID = "fioriShepherdGuideEditorButton";
 	var EVENT_CHANNEL = "fiori.shepherd.guide";
+
+	/** What is kept of a tour to go on later (catalog entries may carry more). */
+	function sessionDef(oDef) {
+		var oSaved = Object.assign({}, oDef);
+		delete oSaved.isDraft;
+		return oSaved;
+	}
 
 	function getContainer() {
 		return sap.ui.require("sap/ushell/Container") || (window.sap && sap.ushell && sap.ushell.Container);
@@ -50,6 +58,7 @@ sap.ui.define([
 			this._oRegistry = new TourRegistry(this._oConfig.toursUrl, this._oStore);
 			this._oRunner = new TourRunner({ bundle: this._oBundle });
 			this._aCurrentTours = [];
+			this._aAllTours = [];
 			this._iContextSeq = 0;
 
 			this._bEditorEnabled = this._isEditorEnabled();
@@ -203,34 +212,99 @@ sap.ui.define([
 			if (!this._fnShowButton) {
 				return;
 			}
-			if (this._aCurrentTours.length > 0 || this._getPausedTour() || !this._oConfig.hideButtonWithoutTours) {
+			if (this._aCurrentTours.length > 0 || this._getPausedTour() || this._otherTours().length > 0
+				|| !this._oConfig.hideButtonWithoutTours) {
 				this._fnShowButton();
 			} else {
 				this._fnHideButton();
 			}
 		},
 
+		/**
+		 * Guides that can be started from anywhere but don't belong to this page ("All guides").
+		 * Config showAllTours: false turns the list off; a tour with listed: false is never in it.
+		 */
+		_otherTours: function () {
+			if (this._oConfig.showAllTours === false) {
+				return [];
+			}
+			var mHere = {};
+			this._aCurrentTours.forEach(function (oTour) {
+				mHere[oTour.id] = true;
+			});
+			return this._aAllTours.filter(function (oTour) {
+				// only guides the plugin can take the user to (a start page, or an intent without wildcards)
+				return !mHere[oTour.id] && oTour.listed !== false && !!(oTour.start || AppMatch.hashOf(oTour));
+			});
+		},
+
 		_onHeaderButtonPress: function (oEvent) {
 			var aTours = this._aCurrentTours;
 			var oPaused = this._getPausedTour();
-			if (oPaused) {
-				this._openTourChooser(oEvent.getSource(), aTours, oPaused);
-				return;
-			}
-			if (aTours.length === 0) {
-				sap.ui.require(["sap/m/MessageToast"], function (MessageToast) {
-					MessageToast.show(this._oBundle.getText("noTours"));
-				}.bind(this));
+			var bOthers = this._otherTours().length > 0;
+			if (oPaused || aTours.length > 1 || (aTours.length === 1 && bOthers)) {
+				this._openTourChooser(oEvent.getSource(), aTours, oPaused, bOthers);
 				return;
 			}
 			if (aTours.length === 1) {
 				this.startTour(aTours[0]);
 				return;
 			}
-			this._openTourChooser(oEvent.getSource(), aTours);
+			if (bOthers) {
+				this.openAllGuides();
+				return;
+			}
+			sap.ui.require(["sap/m/MessageToast"], function (MessageToast) {
+				MessageToast.show(this._oBundle.getText("noTours"));
+			}.bind(this));
 		},
 
-		_openTourChooser: function (oSource, aTours, oPaused) {
+		/** A searchable list of every guide; the chosen one takes the user to its start page. */
+		openAllGuides: function () {
+			var that = this;
+			sap.ui.require(["sap/m/SelectDialog", "sap/m/StandardListItem", "sap/ui/model/json/JSONModel",
+				"sap/ui/model/Filter", "sap/ui/model/FilterOperator"], function (SelectDialog, StandardListItem, JSONModel, Filter, FilterOperator) {
+				var aItems = that._aCurrentTours.concat(that._otherTours()).map(function (oTour) {
+					var sWhere = oTour.start ? StartPage.splitHash(StartPage.parse(oTour.start).hash).intent
+						: AppMatch.labelOf(oTour);
+					return {
+						id: oTour.id,
+						title: Text.resolve(oTour.title) || oTour.id,
+						description: sWhere ? that._oBundle.getText("startsIn", [sWhere]) : ""
+					};
+				});
+				if (that._oAllGuidesDialog) {
+					that._oAllGuidesDialog.destroy();
+				}
+				var fnSearch = function (oEvent) {
+					var sValue = oEvent.getParameter("value") || "";
+					oEvent.getSource().getBinding("items").filter(sValue ? [new Filter({
+						filters: [new Filter("title", FilterOperator.Contains, sValue), new Filter("description", FilterOperator.Contains, sValue)],
+						and: false
+					})] : []);
+				};
+				that._oAllGuidesDialog = new SelectDialog("fioriShepherdGuideAllGuidesDialog", {
+					title: that._oBundle.getText("allGuidesTitle"),
+					noDataText: that._oBundle.getText("noTours"),
+					items: {
+						path: "/items",
+						template: new StandardListItem({ title: "{title}", description: "{description}", icon: "sap-icon://learning-assistant", type: "Active" })
+					},
+					search: fnSearch,
+					liveChange: fnSearch,
+					confirm: function (oEvent) {
+						var oItem = oEvent.getParameter("selectedItem");
+						if (oItem) {
+							that.startTour(oItem.getBindingContext().getProperty("id"));
+						}
+					}
+				});
+				that._oAllGuidesDialog.setModel(new JSONModel({ items: aItems }));
+				that._oAllGuidesDialog.open();
+			});
+		},
+
+		_openTourChooser: function (oSource, aTours, oPaused, bOthers) {
 			var that = this;
 			sap.ui.require(["sap/m/ActionSheet", "sap/m/Button"], function (ActionSheet, Button) {
 				if (that._oActionSheet) {
@@ -264,6 +338,15 @@ sap.ui.define([
 						press: function () {
 							TourSession.clear();
 							that._updateButtonVisibility();
+						}
+					}));
+				}
+				if (bOthers) {
+					aButtons.push(new Button("fioriShepherdGuideAllGuides", {
+						text: that._oBundle.getText("allGuides"),
+						icon: "sap-icon://search",
+						press: function () {
+							that.openAllGuides();
 						}
 					}));
 				}
@@ -307,12 +390,14 @@ sap.ui.define([
 				this._oEditor.refreshContext();
 			}
 
-			this._oRegistry.findTours(oContext).then(function (aTours) {
+			Promise.all([this._oRegistry.findTours(oContext), this._oRegistry.loadAll()]).then(function (aResults) {
+				var aTours = aResults[0];
 				if (iSeq !== that._iContextSeq) {
 					return; // the user navigated on in the meantime
 				}
 				that._oContext = oContext;
 				that._aCurrentTours = aTours;
+				that._aAllTours = aResults[1];
 				that._oHeaderItemReady.then(that._updateButtonVisibility.bind(that));
 				// a tour the user is in the middle of goes first; never auto-start another one then
 				if (!that._maybeResume(oContext) && !that._getPausedTour()) {
@@ -344,6 +429,14 @@ sap.ui.define([
 			if (!oState) {
 				return false;
 			}
+			if (oState.pendingStart) {
+				// the guide was started elsewhere: begin once the user is on its start page
+				if (!StartPage.isAt(oState.def.start)) {
+					return false;
+				}
+				this._runTour(oState.def, { startAt: 0, resumed: true, preview: oState.preview });
+				return true;
+			}
 			var iIndex = TourRunner.resumeIndex(oState.def, oState.index, oContext);
 			if (iIndex < 0) {
 				return false;
@@ -363,6 +456,10 @@ sap.ui.define([
 				return;
 			}
 			if (this._maybeResume(this._currentContext())) {
+				return;
+			}
+			if (oState.def.start && (oState.pendingStart || oState.index === 0)) {
+				StartPage.go(oState.def.start); // the guide begins once its start page is open
 				return;
 			}
 			var oApp = TourRunner.stepApps(oState.def)[oState.index];
@@ -464,7 +561,7 @@ sap.ui.define([
 					});
 				},
 				previewTour: function (oDef) {
-					return that._runTour(oDef, { preview: true });
+					return that._startDef(oDef, { preview: true });
 				},
 				onDraftsChanged: function () {
 					that._refreshContext();
@@ -576,7 +673,7 @@ sap.ui.define([
 				}
 				return that._oRegistry.loadTour(oEntry);
 			}).then(function (oTour) {
-				return that._runTour(oTour, {});
+				return that._startDef(oTour, {});
 			}).catch(function (oError) {
 				Log.error("Could not start guided tour", oError, LOG_COMPONENT);
 			});
@@ -589,12 +686,24 @@ sap.ui.define([
 		 * @param {{startAt: number, resumed: boolean, preview: boolean}} mOptions preview: an
 		 *        editor preview, which does not count as "seen"
 		 */
+		/**
+		 * Starts a guide from wherever the user is: when it has a start page and the user is
+		 * somewhere else, it takes the user there first and the guide begins once that page is open.
+		 */
+		_startDef: function (oDef, mOptions) {
+			if (oDef.start && !StartPage.isAt(oDef.start)) {
+				TourSession.save({ def: sessionDef(oDef), index: 0, preview: !!mOptions.preview, pendingStart: true });
+				this._updateButtonVisibility();
+				StartPage.go(oDef.start);
+				return Promise.resolve(null);
+			}
+			return this._runTour(oDef, mOptions);
+		},
+
 		_runTour: function (oDef, mOptions) {
 			var that = this;
 			var bPreview = !!mOptions.preview;
-			// keep only what is needed to go on later (catalog entries may carry more)
-			var oSaved = Object.assign({}, oDef);
-			delete oSaved.isDraft;
+			var oSaved = sessionDef(oDef);
 			var fnSave = function (iIndex) {
 				TourSession.save({ def: oSaved, index: iIndex, preview: bPreview });
 			};
@@ -605,9 +714,13 @@ sap.ui.define([
 				onStep: fnSave,
 				onPause: function (iIndex, oApp, bNavigate) {
 					fnSave(iIndex);
-					var sHash = bNavigate ? AppMatch.hashOf(oApp) : "";
-					if (sHash) {
-						window.location.hash = sHash; // "Next" into another app opens that app
+					if (bNavigate && iIndex === 0 && oDef.start) {
+						StartPage.go(oDef.start);
+					} else {
+						var sHash = bNavigate ? AppMatch.hashOf(oApp) : "";
+						if (sHash) {
+							window.location.hash = sHash; // "Next" into another app opens that app
+						}
 					}
 					setTimeout(that._updateButtonVisibility.bind(that), 0);
 				},
