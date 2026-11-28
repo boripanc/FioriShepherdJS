@@ -12,7 +12,9 @@
 					component: "fiori.shepherd.guide",
 					url: "../",
 					config: {
-						autoStart: true
+						autoStart: true,
+						// tour database API; off in the sandbox unless ?toursApi=<url> is given
+						toursApiUrl: new URLSearchParams(window.location.search).get("toursApi") || ""
 					}
 				}
 			},
