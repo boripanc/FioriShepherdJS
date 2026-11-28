@@ -13,6 +13,8 @@
 					url: "../",
 					config: {
 						autoStart: true,
+						// the sandbox uses the sample tours in test/tours (the plugin itself ships with no tours)
+						toursUrl: new URLSearchParams(window.location.search).get("toursUrl") || "./tours/",
 						// in the sandbox the editor is only for ?fiori-guide-editor=true (the end-user tests run without it)
 						// (?editorUsers=<ids> sets it directly)
 						editorUsers: new URLSearchParams(window.location.search).get("editorUsers")
