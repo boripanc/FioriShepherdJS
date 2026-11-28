@@ -136,6 +136,26 @@ something: the guide really presses them.
 **In the editor:** set *Continue when* to *The guide clicks the element for the user*, and/or enter a value in
 *Value the guide fills in for the user*. *Then press Enter for the user* appears once a value is entered.
 
+## Ready-made tour: creating a sales order (VA01)
+
+[`tours/sales-order-gui.json`](webapp/tours/sales-order-gui.json) guides a user through a standard sales order in
+SAP GUI for HTML, in 16 steps:
+
+1. Start **VA01** in the command field (skipped with Next when VA01 is already open).
+2. Initial screen: order type (`OR`), sales organization, distribution channel, division, then Enter.
+3. Overview: sold-to party, ship-to party, customer reference (PO number), requested delivery date.
+4. First item: material and order quantity, Enter to check price and availability.
+5. Save, and where to find the new order number.
+
+The user types every value; the tour only points and explains. It is in the catalog for the intent
+`SalesDocument-createGui`: change `intent` in `index.json` to the intent of the VA01 tile on your Launchpad.
+
+Fields are found by their SAP GUI tooltip (`title`), ignoring case, with a few alternatives for different
+releases, e.g. `[title='Sold-To Party' i], [title='Sold-to party number' i]`. These names were checked against the
+mock SAP GUI page only. If a step appears in the middle of the screen instead of next to its field on your system,
+open the tour in the [editor](#tour-editor-no-json-needed), pick the field again and export. Example values
+(sales organization 1010 and so on) are the S/4HANA sample data; change the texts to your organization's values.
+
 ## Tours across apps
 
 A tour keeps going when the user moves from one screen or app to the next:
@@ -325,6 +345,7 @@ scripts/editor-test.mjs     Playwright end-to-end test of the editor
 scripts/journey-test.mjs    Playwright test of a tour across apps, reload and pause/continue
 scripts/editor-journey-test.mjs  Playwright test of recording a tour across apps in the editor
 scripts/gui-strict-test.mjs Playwright test of a T-code step against a stricter SAP GUI mock
+scripts/sales-order-test.mjs Playwright test that plays the VA01 sales order tour on the SAP GUI mock
 ```
 
 ## ShepherdJS version and license

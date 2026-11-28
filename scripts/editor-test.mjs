@@ -154,7 +154,7 @@ try {
 	await page.click("#fioriShepherdGuideEditorButton"); // close editor
 
 	// ---- transaction code steps in SAP GUI for HTML (mock screen in an iframe) ----
-	await page.evaluate(() => localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "1"));
+	await page.evaluate(() => localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "2"));
 	await page.evaluate(() => { window.location.hash = "#SalesDocument-createGui"; });
 	const gui = page.frameLocator("iframe");
 	await gui.locator("#ToolbarOkCode").waitFor({ timeout: 30000 });

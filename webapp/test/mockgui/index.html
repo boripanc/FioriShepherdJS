@@ -19,6 +19,9 @@
 	.tree div { padding: 4px 0 4px 16px; }
 	.field { display: grid; grid-template-columns: 180px 160px; align-items: center; margin-bottom: 8px; }
 	.field input { height: 26px; padding: 0 8px; border: 1px solid #556b82; border-radius: 4px; }
+	.items { border-collapse: collapse; margin-top: 16px; }
+	.items th, .items td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #d9d9d9; }
+	.items input { height: 24px; padding: 0 6px; border: 1px solid #556b82; border-radius: 4px; }
 	.status { position: fixed; bottom: 0; left: 0; right: 0; padding: 6px 16px; background: #fff; border-top: 1px solid #d9d9d9; color: #aa0808; min-height: 18px; }
 </style>
 </head>
@@ -27,6 +30,7 @@
 		<input id="ToolbarOkCode" title="Command field" autocomplete="off" placeholder="">
 		<button id="M0:36::btn[0]" type="button">Enter</button>
 		<button id="M0:36::btn[3]" type="button">Back</button>
+		<button id="M0:36::btn[11]" type="button" title="Save (Ctrl+S)">Save</button>
 	</div>
 	<div id="screen"></div>
 	<div class="status" id="wnd[0]/sbar"></div>
@@ -38,12 +42,24 @@
 			'<div class="field"><label for="M0:46:::3:34">Sales Organization</label><input id="M0:46:::3:34" title="Sales Organization"></div>' +
 			'<div class="field"><label for="M0:46:::4:34">Distribution Channel</label><input id="M0:46:::4:34" title="Distribution Channel"></div>' +
 			'<div class="field"><label for="M0:46:::5:34">Division</label><input id="M0:46:::5:34" title="Division"></div>' +
-			'</div>'
+			'</div>',
+		// VA01 overview screen (after Enter on the initial screen); field tooltips as in SAP GUI
+		overview: '<h1>Create Standard Order: Overview</h1><div class="content">' +
+			'<div class="field"><label for="M0:46:::1:20">Sold-To Party</label><input id="M0:46:::1:20" title="Sold-To Party"></div>' +
+			'<div class="field"><label for="M0:46:::2:20">Ship-To Party</label><input id="M0:46:::2:20" title="Ship-To Party"></div>' +
+			'<div class="field"><label for="M0:46:::3:20">Cust. Reference</label><input id="M0:46:::3:20" title="Customer Reference"></div>' +
+			'<div class="field"><label for="M0:46:::5:20">Req. Deliv.Date</label><input id="M0:46:::5:20" title="Requested delivery date"></div>' +
+			'<table class="items"><tr><th>Item</th><th>Material</th><th>Order Quantity</th></tr>' +
+			'<tr><td>10</td><td><input id="M0:46:::7:3" title="Material"></td><td><input id="M0:46:::7:22" title="Order Quantity"></td></tr>' +
+			'<tr><td></td><td><input id="M0:46:::8:3" title="Material"></td><td><input id="M0:46:::8:22" title="Order Quantity"></td></tr>' +
+			'</table></div>'
 	};
+	var current = "home";
 	function show(name) {
 		document.getElementById("screen").innerHTML = screens[name];
 		document.getElementById("wnd[0]/sbar").textContent = "";
-		document.title = name === "home" ? "SAP Easy Access" : "Create Sales Documents";
+		document.title = name === "home" ? "SAP Easy Access" : name === "overview" ? "Create Standard Order: Overview" : "Create Sales Documents";
+		current = name;
 	}
 	// ?strict=1 behaves more like the real SAP GUI for HTML: it handles Enter itself before the
 	// field sees it (window capture, stopImmediatePropagation) and loads a new page per transaction.
@@ -58,6 +74,8 @@
 			} else {
 				show(code);
 			}
+		} else if (!code && current === "VA01") {
+			show("overview"); // Enter on the initial screen opens the order
 		} else if (code) {
 			document.getElementById("wnd[0]/sbar").textContent = "Transaction " + code + " does not exist";
 		}
@@ -77,6 +95,16 @@
 	}
 	document.getElementById("M0:36::btn[0]").addEventListener("click", run);
 	document.getElementById("M0:36::btn[3]").addEventListener("click", function () { show("home"); });
+	document.getElementById("M0:36::btn[11]").addEventListener("click", function () {
+		if (current === "overview") {
+			show("VA01");
+			document.getElementById("wnd[0]/sbar").textContent = "Standard Order 4711 has been saved";
+		}
+	});
+	// Enter in a screen field works like the Enter button
+	document.getElementById("screen").addEventListener("keydown", function (e) {
+		if (e.key === "Enter") { run(); }
+	});
 	var start = /[?&]screen=(\w+)/.exec(location.search);
 	show(start && screens[start[1]] ? start[1] : "home");
 </script>

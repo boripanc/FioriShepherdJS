@@ -69,7 +69,7 @@
 				"en": "Create a sales order in SAP GUI"
 			},
 			"intent": "SalesDocument-createGui",
-			"version": 1,
+			"version": 2,
 			"url": "sales-order-gui.json"
 		}
 	]

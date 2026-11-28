@@ -29,7 +29,7 @@ try {
 	await page.evaluate(() => {
 		localStorage.clear();
 		localStorage.setItem("fiori.shepherd.guide.seen.salesorder-overview", "1");
-		localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "1");
+		localStorage.setItem("fiori.shepherd.guide.seen.sales-order-gui", "2");
 		localStorage.setItem("fiori.shepherd.guide.drafts", JSON.stringify({
 			"auto-ui5": {
 				id: "auto-ui5", title: "Auto UI5", intent: "SalesOrder-manage", autoStart: true, version: 1,
