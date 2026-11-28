@@ -1,5 +1,6 @@
 // Tours stored in a database through the n8n API (TourStore), against a mocked API.
 // Start the dev server first (npm run serve), then: node scripts/database-test.mjs
+import { toggleEditor } from "./editor-menu.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 
@@ -90,7 +91,7 @@ try {
 		localStorage.setItem("fiori.shepherd.guide.seen.salesorder-overview", "1");
 	});
 	await page.goto(BASE + "#SalesOrder-manage");
-	await page.waitForSelector("#fioriShepherdGuideEditorButton", { timeout: 60000 });
+	await page.waitForSelector("#fioriShepherdGuideHeaderButton", { timeout: 60000 });
 	await page.waitForSelector("[id$='--ordersTable']", { timeout: 30000 });
 
 	// 1. a database tour plays like a file tour
@@ -104,7 +105,7 @@ try {
 	await page.waitForTimeout(400);
 
 	// 2. editor lists file tours and database tours
-	await page.click("#fioriShepherdGuideEditorButton");
+	await toggleEditor(page);
 	await page.waitForSelector("#fioriGuideEditor .sapMPage", { timeout: 20000 });
 	await page.waitForTimeout(800);
 	let opts = await tourOptions();
@@ -167,8 +168,8 @@ try {
 	// 6. database down: index.json tours still work
 	apiDown = true;
 	await page.goto(BASE.replace("?", "?x=1&") + "#SalesOrder-manage");
-	await page.waitForSelector("#fioriShepherdGuideEditorButton", { timeout: 60000 });
-	await page.click("#fioriShepherdGuideEditorButton");
+	await page.waitForSelector("#fioriShepherdGuideHeaderButton", { timeout: 60000 });
+	await toggleEditor(page);
 	await page.waitForSelector("#fioriGuideEditor .sapMPage", { timeout: 20000 });
 	await page.waitForTimeout(800);
 	opts = await tourOptions();

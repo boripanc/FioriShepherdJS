@@ -13,6 +13,10 @@
 					url: "../",
 					config: {
 						autoStart: true,
+						// in the sandbox the editor is only for ?fiori-guide-editor=true (the end-user tests run without it)
+						// (?editorUsers=<ids> sets it directly)
+						editorUsers: new URLSearchParams(window.location.search).get("editorUsers")
+							|| (new URLSearchParams(window.location.search).get("fiori-guide-editor") === "true" ? "" : "NO_EDITOR_IN_SANDBOX"),
 						// tour database API; off in the sandbox unless ?toursApi=<url> is given
 						toursApiUrl: new URLSearchParams(window.location.search).get("toursApi") || ""
 					}

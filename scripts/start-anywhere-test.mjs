@@ -1,6 +1,7 @@
 // Starting a guide from anywhere: "All guides" in the Guided Tour button, and the plugin
 // taking the user to the guide's start page (hash, hash with parameters, or another URL).
 // Start the dev server first (npm run serve), then: npm test
+import { toggleEditor } from "./editor-menu.mjs";
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 
@@ -106,7 +107,7 @@ try {
 	await page.click(".shepherd-element:visible .shepherd-cancel-icon");
 
 	// 4) the editor fills in a start page for new guides
-	await page.click("#fioriShepherdGuideEditorButton");
+	await toggleEditor(page);
 	await page.waitForSelector("#fioriGuideEditor .sapMPage", { timeout: 20000 });
 	await page.waitForTimeout(800);
 	await page.click("#fioriGuideEditor .sapMSlt");

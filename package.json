@@ -9,7 +9,7 @@
     "start": "ui5 serve --open test/flpSandbox.html",
     "serve": "ui5 serve",
     "build": "npm run build:shepherd && ui5 build --clean-dest && node scripts/ascii-dist.mjs",
-    "test": "node scripts/smoke-test.mjs && node scripts/editor-test.mjs && node scripts/journey-test.mjs && node scripts/editor-journey-test.mjs && node scripts/gui-strict-test.mjs && node scripts/action-test.mjs && node scripts/database-test.mjs && node scripts/start-anywhere-test.mjs"
+    "test": "node scripts/smoke-test.mjs && node scripts/editor-test.mjs && node scripts/journey-test.mjs && node scripts/editor-journey-test.mjs && node scripts/gui-strict-test.mjs && node scripts/action-test.mjs && node scripts/database-test.mjs && node scripts/start-anywhere-test.mjs && node scripts/editor-access-test.mjs"
   },
   "devDependencies": {
     "@ui5/cli": "^4.0.0",

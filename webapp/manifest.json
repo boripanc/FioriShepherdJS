@@ -48,7 +48,9 @@
         "showHeaderButton": true,
         "hideButtonWithoutTours": true,
         "showAllTours": true,
-        "resumeMinutes": 30
+        "resumeMinutes": 30,
+        "enableEditor": true,
+        "editorUsers": ""
       }
     }
   },
